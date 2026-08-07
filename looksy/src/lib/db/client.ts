@@ -1,6 +1,19 @@
+import { loadEnvFile } from "node:process";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+
+if (!process.env.DATABASE_URL) {
+  try {
+    loadEnvFile(".env.local");
+  } catch {
+    try {
+      loadEnvFile(".env");
+    } catch {
+      // env files are optional — DATABASE_URL may come from the environment
+    }
+  }
+}
 
 const connectionString = process.env.DATABASE_URL!;
 

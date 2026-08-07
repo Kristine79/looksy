@@ -18,6 +18,22 @@
 9. [ADR-008: Testing Strategy](#9-adr-008-testing-strategy)
 10. [ADR-009: Deployment](#10-adr-009-deployment)
 11. [ADR-010: Next.js 16 over Next.js 15](#11-adr-010-nextjs-16-over-nextjs-15)
+12. [ADR-011: UUIDv7 for Primary Keys](#12-adr-011-uuidv7-for-primary-keys)
+13. [ADR-012: HNSW over IVFFlat for Vector Search](#13-adr-012-hnsw-over-ivfflat-for-vector-search)
+14. [ADR-013: Normalized Wear Log](#14-adr-013-normalized-wear-log)
+15. [ADR-014: Application-Layer Decay and Denormalized Counters](#15-adr-014-application-layer-decay-and-denormalized-counters)
+16. [ADR-015: memory_evidence as Separate Table](#16-adr-015-memory_evidence-as-separate-table)
+17. [ADR-016: No Subscriptions/Payments Tables in Phase 2](#17-adr-016-no-subscriptionspayments-tables-in-phase-2)
+18. [ADR-017: Enum-Like Values as varchar + TypeScript Unions](#18-adr-017-enum-like-values-as-varchar--typescript-unions)
+19. [ADR-018: Soft Delete via Status/DeletedAt](#19-adr-018-soft-delete-via-statusdeletedat)
+20. [ADR-019: updated_at via Service Layer (No DB Triggers)](#20-adr-019-updated_at-via-service-layer-no-db-triggers)
+21. [ADR-020: outfits.status over is_saved Flag](#21-adr-020-outfitsstatus-over-is_saved-flag)
+22. [ADR-021: AI Provider Abstraction](#22-adr-021-ai-provider-abstraction-over-direct-openai-usage)
+23. [ADR-022: Vision Responses Validated with Zod](#23-adr-022-vision-responses-validated-with-zod)
+24. [ADR-023: Embeddings via Upsert, Retrieval via HNSW](#24-adr-023-embeddings-stored-via-upsert-retrieval-via-hnsw-cosine)
+25. [ADR-024: Recommendation Pipeline with Prompt Boundary](#25-adr-024-recommendation-pipeline-with-prompt-boundary)
+26. [ADR-025: OpenAI-Compatible Provider Configuration via Environment Variables](#26-adr-025-openai-compatible-provider-configuration-via-environment-variables)
+27. [ADR-026: Trust Layer — Evidence-Grounded Explanations](#27-adr-026-trust-layer--evidence-grounded-explanations)
 
 ---
 
@@ -514,6 +530,522 @@ The MVP architecture documentation specified Next.js 15.x. During Phase 1, `crea
 
 ---
 
+## 12. ADR-011: UUIDv7 for Primary Keys
+
+**Status:** Accepted
+
+### Context
+
+Phase 2 needs primary keys that are globally unique, sortable, and index-friendly. PostgreSQL `gen_random_uuid()` (v4) is random — bad locality for B-tree index inserts and no ordering signal. Sequences break modular schema design and are unsafe in distributed setups.
+
+### Decision
+
+Use **UUIDv7 (RFC 9562)** for all primary keys via a shared `$defaultFn` helper `src/lib/db/uuidv7.ts`. UUIDv7 embeds a 48-bit Unix timestamp + 74 random bits; values are time-ordered, so index inserts are append-mostly.
+
+### Rationale
+
+- Time-ordered → excellent B-tree/HNSW locality, natural chronological sorting
+- Random suffix → collision-safe across environments (dev/staging/prod, seed vs app)
+- No DB-side function dependency (generated in app layer) — works with Neon, local PG, and any pooler
+- `uuid` column type keeps storage compact (16 bytes)
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| UUIDv4 (`defaultRandom`) | Random inserts fragment B-tree indexes; no time ordering |
+| Bigserial | Sequence coupling across modules, non-uniform with sharding/pooling |
+| ULID / snowflake | No native PG type; UUIDv7 already standardized in RFC 9562 |
+
+### Consequences
+
+- All new tables use `uuid("id").primaryKey().$defaultFn(uuidv7)`
+- IDs are comparable/orderable by creation time
+- Drizzle 0.38 has no built-in `uuidv7()` — custom helper in `src/lib/db/uuidv7.ts`
+
+---
+
+## 13. ADR-012: HNSW over IVFFlat for Vector Search
+
+**Status:** Accepted
+
+### Context
+
+Item and style embeddings are searched by cosine similarity. The v1.0 doc proposed ivfflat, which requires `lists` tuning, offers lower recall at small scale, and needs periodic re-clustering (`ivfflat` index rebuilds) as data grows.
+
+### Decision
+
+Use **HNSW** index (`USING hnsw` with `vector_cosine_ops`) on `item_embeddings.embedding` and `user_style_profiles.style_vec`. No index on `ivfflat`; no separate `lists` parameter needed.
+
+### Rationale
+
+- HNSW = graph-based ANN with high recall, no maintenance (no re-clustering), works well from day one at MVP scale (250K vectors per TECHNICAL_ASSUMEPTIONS_AND_QUESTIONS.md)
+- cosine distance is the primary similarity metric (embeddings are normalized) → `vector_cosine_ops`
+- pgvector 0.8.0 (Neon) supports HNSW
+
+### Neon Limitation Discovered
+
+Neon (pgvector 0.8.0) does **not** support multi-column HNSW indexes (`access method "hnsw" does not support multicolumn indexes`). The planned composite `(user_id, embedding)` HNSW was split:
+
+- `idx_item_embeddings_vec` — HNSW on `embedding` alone
+- `idx_item_embeddings_user` — B-tree on `user_id` for row filtering
+
+Queries filter by `user_id` (B-tree) and order by vector distance (HNSW) — planner combines both; verified in Phase 2 verification queries.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| IVFFlat | Requires `lists` tuning + re-clustering; worse recall at small scale |
+| Flat scan | O(n) per query — fails at 250K vectors |
+| Multi-column HNSW (user_id, embedding) | Not supported by Neon pgvector 0.8.0 — error 0A000 |
+
+### Consequences
+
+- `idx_item_embeddings_vec` — HNSW cosine on embedding
+- `idx_item_embeddings_user` — B-tree on user_id
+- If a future DB supports multi-column HNSW, the index can be upgraded without schema changes
+
+---
+
+## 14. ADR-013: Normalized Wear Log
+
+**Status:** Accepted
+
+### Context
+
+v1.0 doc stored item IDs as an array (`item_ids uuid[]`) inside `wear_log`. Arrays complicate querying (per-item analytics, join to `clothing_items`), can't hold per-item metadata, and block FK enforcement.
+
+### Decision
+
+Split wear records into two tables: `wear_log` (session-level: user, outfit, worn_at, occasion, weather, source) and `wear_log_items` (one row per item: `wear_log_id`, `item_id`, `position`).
+
+### Rationale
+
+- FKs to `clothing_items` and `outfits` with proper `ON DELETE` semantics
+- Straightforward per-item analytics (`GROUP BY item_id`) and wear-count maintenance
+- Matches `memory_evidence`/`outfit_feedback` source-linking needs (ADR-015)
+
+### Consequences
+
+- `wear_log_items` has `item_id` FK with `ON DELETE SET NULL` (item removal keeps history) and `wear_log_id` FK with `CASCADE`
+- Wear counting: `clothing_items.wear_count` / `last_worn` denormalized fields are updated by the service layer on wear events (see ADR-014)
+
+---
+
+## 15. ADR-014: Application-Layer Decay and Denormalized Counters
+
+**Status:** Accepted
+
+### Context
+
+v1.0 doc proposed a `BEFORE UPDATE` trigger (`update_memory_confidence`) applying confidence decay inside PostgreSQL. Triggers hide business logic, complicate migrations, and make behavior non-reproducible in tests.
+
+### Decision
+
+Implement **decay and denormalized counters in the application layer** (service code), not in DB triggers. DB provides constraints and defaults only.
+
+### Rationale
+
+- Business logic (decay curve, status transitions, wear-count updates) lives in one place — the service layer — testable with unit tests
+- No hidden writes during data migrations
+- Keeps schema declarative: `wear_count`, `last_worn`, `confidence` are plain columns the app updates
+
+### Consequences
+
+- No trigger functions in the migration SQL (Phase 2 has zero triggers/functions)
+- The future "Memory & Decay" service will compute confidence via app code, matching `memory_evidence` signals
+- DB remains a dumb, fast store; all mutations flow through typed services
+
+---
+
+## 16. ADR-015: memory_evidence as Separate Table
+
+**Status:** Accepted
+
+### Context
+
+v1.0 doc embedded evidence as a JSONB array on `fashion_memories`. Evidence needs source traceability (source_type, source_id), per-item filtering, and later decay scoring.
+
+### Decision
+
+Store evidence in a dedicated `memory_evidence` table: `memory_id` FK (CASCADE), `type`, `text`, `source_type`, `source_id`, `data` (JSONB), `confidence`.
+
+### Rationale
+
+- Each evidence row can reference a concrete source row (`wear_log`, `outfit_feedback`, `outfit`, `item`, `user_edit`) via `source_type` + `source_id`
+- Queries like "all evidence for memory X" or "which memories cite this outfit" become trivial
+- `data` JSONB keeps flexible payloads without schema churn
+
+### Consequences
+
+- `fashion_memories` no longer carries evidence payloads — 19 columns of memory metadata, evidence lives in the child table
+- `memory_evidence.confidence` is nullable (weather/rotation evidence may not carry one) with a CHECK constraint
+
+---
+
+## 17. ADR-016: No Subscriptions/Payments Tables in Phase 2
+
+**Status:** Accepted
+
+### Context
+
+v1.0 doc included `plans` and `user_subscriptions` tables with Stripe fields. Monetization details are not yet designed (see ROADMAP/Investor deck); Stripe integration is not part of the MVP DB scope.
+
+### Decision
+
+**Do not create subscription/payment tables.** The 14-table Phase 2 schema covers users → wardrobe → AI → outfits → wear → memories → analytics only.
+
+### Rationale
+
+- Avoids premature modeling of pricing tiers that may change (free limits, Pro features, plans structure)
+- Stripe customer/subscription IDs belong to the payment provider; a future migration can add them when monetization is designed
+- Keeps Phase 2 focused on the core recommendation loop
+
+### Consequences
+
+- `user_preferences` carries no plan/limits fields
+- When monetization is designed, add a new module (`modules/subscriptions`) with its own migration — no rework of existing tables
+- Free-tier limits, if needed, are enforced in app code with config
+
+---
+
+## 18. ADR-017: Enum-Like Values as varchar + TypeScript Unions
+
+**Status:** Accepted
+
+### Context
+
+PostgreSQL native enums (`CREATE TYPE ... AS ENUM`) are rigid: adding a value requires `ALTER TYPE`, which blocks transactional DDL and complicates migrations. v1.0 doc used free-form varchars with no type safety.
+
+### Decision
+
+Use **varchar columns with length limits** for enum-like fields, typed in TypeScript as string-literal unions (e.g. `ClothingItemStatus = "active" | "archived" | "donated"`). DB CHECK constraints enforce domain validity where cheap; Zod schemas will enforce at the API boundary.
+
+### Rationale
+
+- Adding a status value = changing a TS union + (optionally) a CHECK constraint — no `ALTER TYPE`, no table rewrites
+- Zod validation at service/API layer provides runtime safety identical to PG enums for app flows
+- CHECK constraints (e.g. `formality between 1 and 5`, `confidence between 0 and 1`) catch direct-DB misuse
+
+### Consequences
+
+- All status/type fields are `varchar(20-50)` in the DB
+- TS unions exported from each module schema (`ClothingItemStatus`, `OutfitStatus`, `MemoryStatus`, etc.)
+- Future: add a CHECK or migrate to enum only if analytics proves value
+
+---
+
+## 19. ADR-018: Soft Delete via Status/DeletedAt
+
+**Status:** Accepted
+
+### Context
+
+Wardrobe items can be archived/donated; fashion memories need "deleted" without losing evidence audit trail. Hard deletes destroy history and break memory evidence references.
+
+### Decision
+
+- `clothing_items.status`: `active | archived | donated` (hard delete only via explicit admin path)
+- `fashion_memories.status`: includes `deleted` plus `deleted_at` timestamp; rows are kept for audit/recovery
+- `outfits.status`: `generated | saved | archived | dismissed`
+
+### Rationale
+
+- Preserves analytics and evidence references (`memory_evidence` pointing at items/outfits)
+- Status-based filtering is index-friendly (`idx_clothing_items_user_status`, `idx_fashion_memories_user_status`)
+- Recovers gracefully: "undo archive", "restore memory" are simple status updates
+
+### Consequences
+
+- Application queries must filter `status = 'active'` (or equivalent) in service layer
+- Hard deletes are opt-in per module; currently none of the 14 tables hard-deletes by default
+
+---
+
+## 20. ADR-019: updated_at via Service Layer (No DB Triggers)
+
+**Status:** Accepted
+
+### Context
+
+v1.0 doc had no explicit updated_at strategy. Triggers are an option; app-layer maintenance is another.
+
+### Decision
+
+All tables with `updated_at` rely on the **application/service layer** to set it (e.g. `{ ..., updatedAt: new Date() }` in UPDATE statements). DB defaults only cover `created_at` (`defaultNow()`).
+
+### Rationale
+
+- Consistent with ADR-014 (no hidden DB logic)
+- Migration scripts and bulk operations control timestamps explicitly
+- Avoids trigger overhead on every write
+
+### Consequences
+
+- `updated_at` columns exist with `defaultNow()` (so INSERT-only flows are safe)
+- UPDATE flows must pass `updatedAt` explicitly — service layer convention, noted in module docs
+- No `CREATE TRIGGER` statements anywhere in the Phase 2 migration
+
+---
+
+## 21. ADR-020: outfits.status over is_saved Flag
+
+**Status:** Accepted
+
+### Context
+
+v1.0 doc used a boolean `is_saved` on `outfits`. The product needs a lifecycle: AI generates → user saves/archives/dismisses.
+
+### Decision
+
+Replace `is_saved` with **`outfits.status`**: `generated | saved | archived | dismissed`, default `generated`. Saving = setting `status = 'saved'`.
+
+### Rationale
+
+- One field expresses the full lifecycle; boolean can only distinguish saved/not
+- Index `idx_outfits_user_status` serves "my saved outfits" and "my feed" queries
+- Feedback actions (`wear`, `save`, `swap`, `skip`) map cleanly to status transitions
+
+### Consequences
+
+- `outfit_feedback` rows link to outfits via FK; swap feedback links to both `outfit_id` and `replacement_item_id` (item FK, SET NULL)
+- Service layer maps feedback actions → status transitions
+
+---
+
+## 22. ADR-021: AI Provider Abstraction over Direct OpenAI Usage
+
+**Status:** Accepted
+
+### Context
+
+Phase 4 adds real AI capabilities (embeddings, vision analysis). Business services must not depend on the OpenAI SDK directly — future providers (Gemini, Claude, local models) must be swappable without touching business logic.
+
+### Decision
+
+All AI orchestration depends on the **`AIProvider` interface** (`src/modules/ai/types.ts`):
+
+```ts
+interface AIProvider {
+  readonly model: string;
+  readonly embeddingModel: string;
+  embed(request: EmbedRequest): Promise<EmbeddingResult>;
+  analyzeClothingImage(request: ClothingAnalysisRequest): Promise<ClothingAnalysisWithConfidence>;
+  generateOutfits(request: GenerateOutfitsRequest): Promise<GeneratedOutfit[]>;
+}
+```
+
+`OpenAIProvider` (`src/modules/ai/providers/openai/`) is the first implementation. Services receive `AIProvider` via constructor injection — swapping providers is a factory change only.
+
+### Rationale
+
+- Phase 3 already established DI for repositories; provider DI follows the same pattern
+- `generateOutfits` stays on the contract (stub throws) so Phase 5 has a fixed seam
+- Provider-specific SDK imports are confined to `providers/` — nothing else imports `openai`
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Direct `new OpenAI()` in services | Couples business logic to the SDK; provider swap = service rewrite |
+| Interface with only used methods | Contract must include generation for Phase 5 seam |
+
+### Consequences
+
+- `src/modules/ai/providers/` contains SDK-bound code only
+- Future providers (Gemini/Claude/local) = new folder + class, registered via the same interface
+- Tests use mock providers — zero SDK calls in unit tests
+
+---
+
+## 23. ADR-022: Vision Responses Validated with Zod
+
+**Status:** Accepted
+
+### Context
+
+Vision model output is unstructured text (even with `response_format: json_object`). Malformed data (bad hex, formality 9, missing category) must never reach the database.
+
+### Decision
+
+All vision analysis responses pass through **`validateClothingAnalysis()`** (`src/modules/ai/validation.ts`) — a zod schema:
+
+- `category` — required non-empty string
+- `colors[]` — `{ name, hex (#RRGGBB), dominance 0-1 }`, max 8
+- `formality` — integer 1–5
+- `season[]` — max 4 entries
+- `attributes` — free-form record
+
+Invalid responses → `InvalidAIResponseError` with per-field issues; the item is marked `aiStatus = "failed"` with the error persisted.
+
+### Rationale
+
+- Type safety at the AI boundary — validated data becomes typed `ClothingAnalysisResult`
+- Failure is isolated: bad AI output never corrupts `clothing_items`
+- Retry-ready: failed items can be reprocessed without manual cleanup
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Trust vision output directly | Corrupt metadata (e.g. hex "navy") breaks color analysis downstream |
+| Validation inside provider | Providers are SDK adapters; validation is domain policy and stays outside |
+
+### Consequences
+
+- `validation.ts` is provider-agnostic — applies to any future vision provider
+- `AnalysisOutcome` (completed | failed) is the typed result of the pipeline
+
+---
+
+## 24. ADR-023: Embeddings Stored via Upsert, Retrieval via HNSW Cosine
+
+**Status:** Accepted
+
+### Context
+
+Phase 4 generates embeddings for clothing items and must store/retrieve them efficiently. Items can be re-analyzed (retry, re-embedding after metadata edits).
+
+### Decision
+
+- **Store:** `EmbeddingsRepository.upsertItemEmbedding()` — `INSERT ... ON CONFLICT (item_id, model) DO UPDATE`. One embedding per (item, model).
+- **Retrieve:** `findSimilarItems(userId, vector, limit)` — HNSW cosine similarity (`<=>`) filtered by `user_id`, joined with `clothing_items`.
+- **Text representation:** deterministic `buildItemTextRepresentation(item)` — type/subType/brand/material/pattern/colors/formality.
+
+### Rationale
+
+- Upsert avoids duplicate rows on re-analysis (unique `uq_item_embeddings_item_model` from Phase 2)
+- HNSW (ADR-012) gives fast ANN at MVP scale; user filter keeps privacy scoping
+- Deterministic text repr = reproducible embeddings for the same item state
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Delete + insert on re-embed | Two queries + gap in availability |
+| Embed raw vision JSON | Noisy, non-deterministic, model-version dependent |
+
+### Consequences
+
+- `item_embeddings` holds exactly one row per (item, model)
+- RetrievalService combines similarity + user context for RAG (Phase 5 prompt input)
+
+---
+
+## 25. ADR-024: Recommendation Pipeline with Prompt Boundary
+
+**Status:** Accepted
+
+### Context
+
+Phase 5 introduces the first end-to-end AI flow: user request → context retrieval → prompt assembly → LLM generation → explainable recommendation. Product logic must stay decoupled from the LLM.
+
+### Decision
+
+- **Prompt boundary:** `PromptBuilder` (recommendations/services) is the only place prompts are assembled; services never inline prompt strings.
+- **Raw-JSON contract:** `AIProvider.generateRecommendation()` returns the model's raw text. Product-schema validation happens in the service layer via `parseRecommendationResponse()` (zod).
+- **Retrieval-first candidates:** candidates for the LLM come from `RetrievalService` (semantic similarity via HNSW); fallback to the full wardrobe.
+- **One automatic retry** on invalid JSON with an explicit "return JSON only" reminder; a second failure surfaces `InvalidAIResponseError`.
+- **Normalization:** only owned itemIds survive; dedupe; max 8 items; empty wardrobe short-circuits without an LLM call.
+
+### Rationale
+
+- Provider stays a dumb text generator; swapping OpenAI for Gemini/local does not touch product logic (ADR-021).
+- Zod validation close to the caller gives actionable `InvalidAIResponseError` details (path: issue).
+- Retry covers the most common real-world failure mode of chat models.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Provider returns typed `OutfitRecommendation` | Couples provider to product schema; duplicated validation |
+| No retry | Reliable enough at MVP, but a single retry is cheap and materially improves success rate |
+| LLM picks from full wardrobe always | Token cost grows with wardrobe; RAG candidates keep prompts small and focused |
+
+### Consequences
+
+- `docs/LOOKSY_RECOMMENDATION_ENGINE.md` describes the full pipeline.
+- New provider implementations only implement the text contract.
+- Prompt changes are localized to `PromptBuilder` (single source of truth).
+
+---
+
+## 26. ADR-025: OpenAI-Compatible Provider Configuration via Environment Variables
+
+**Status:** Accepted
+
+### Context
+
+LOOKSY should work with any OpenAI-compatible endpoint (OpenAI, OpenCode Go, LiteLLM, vLLM, Together, etc.) without code changes. Keys must never live in the codebase.
+
+### Decision
+
+- Env config resolved centrally in `src/modules/ai/config.ts` (`getAIProviderConfig()`):
+  - `AI_API_KEY` (fallback `OPENAI_API_KEY`)
+  - `AI_BASE_URL` — endpoint override, defaults to official OpenAI
+  - `AI_MODEL` / `AI_VISION_MODEL` / `AI_EMBEDDING_MODEL` — model overrides with defaults
+- `OpenAIProvider` receives the config at construction time (defaults to `getAIProviderConfig()`).
+- `getOpenAIClient()` builds the SDK client with `baseURL` from config.
+- Chat completions deliberately do NOT use `response_format: json_object` (not all OpenAI-compatible servers support it); JSON shape is enforced by the prompt + validation + retry.
+
+### Rationale
+
+- One configuration seam; tests inject config directly (no env mutation needed).
+- Compatibility-first approach: works on the widest range of OpenAI-compatible servers.
+- `AI_API_KEY` naming makes the provider-agnostic intent explicit vs legacy `OPENAI_API_KEY`.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Hardcode OpenAI endpoint/key in client | Violates security; no provider flexibility |
+| Custom provider adapter per endpoint | Premature; OpenAI-compatible covers the requirement (Phase 5) |
+| Rely on `response_format` | Breaks on compatible servers that ignore it |
+
+### Consequences
+
+- `.env.example` documents all AI_* variables.
+- `docs/LOOKSY_RECOMMENDATION_ENGINE.md` section "AI Provider Configuration".
+- Switching to OpenCode Go = set `AI_API_KEY` + `AI_BASE_URL`, zero code changes.
+
+---
+
+## 27. ADR-026: Trust Layer — Evidence-Grounded Explanations
+
+**Status:** Accepted
+
+### Context
+
+Recommendations must be explainable and personal: not "wear this" but "why this outfit fits YOU". Generic fashion advice is explicitly out of scope.
+
+### Decision
+
+- Every recommendation carries `explanation { whyChosen, styleMatch, contextMatch }` + `confidence`.
+- `PromptBuilder.buildEvidence()` derives checkable facts from user data (palette, style keywords, formality per occasion, most-worn items, saved outfits count, average feedback rating, feedback action counts, confirmed/possible memories).
+- System prompt forbids invented preferences, buying advice and generic tips; every reason must be grounded in evidence or item attributes.
+- The service layer hard-enforces ownership: only itemIds present in the user's candidates can appear in the result.
+
+### Rationale
+
+- Evidence facts are computed from data, so explanations are auditable and degrade gracefully when data is sparse (explicit "not enough data yet" branch).
+- Ownership filter is a product guarantee, not a model suggestion — Trust Layer must hold even against a misbehaving model.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Let the LLM invent reasons freely | Hallucinated preferences destroy trust and personalization |
+| Rule-based explanation only | Rigid, cannot explain combos; LLM + evidence is the right balance |
+
+### Consequences
+
+- `RecommendationResult.evidence: string[]` is available to UI for "why" rendering.
+- Empty wardrobe returns a structured empty result (no LLM call).
+- Future `whyNotRecommended` (Phase 6) will reuse the same evidence facts.
+
+---
+
 ## Appendix: Decision Log
 
 | Date | Decision | Status |
@@ -528,6 +1060,22 @@ The MVP architecture documentation specified Next.js 15.x. During Phase 1, `crea
 | 2026-07-22 | ADR-008: Testing Strategy | Accepted |
 | 2026-07-22 | ADR-009: Deployment | Accepted |
 | 2026-08-07 | ADR-010: Next.js 16 over Next.js 15 | Accepted |
+| 2026-08-07 | ADR-011: UUIDv7 for Primary Keys | Accepted |
+| 2026-08-07 | ADR-012: HNSW over IVFFlat for Vector Search | Accepted |
+| 2026-08-07 | ADR-013: Normalized Wear Log | Accepted |
+| 2026-08-07 | ADR-014: Application-Layer Decay and Denormalized Counters | Accepted |
+| 2026-08-07 | ADR-015: memory_evidence as Separate Table | Accepted |
+| 2026-08-07 | ADR-016: No Subscriptions/Payments Tables in Phase 2 | Accepted |
+| 2026-08-07 | ADR-017: Enum-Like Values as varchar + TypeScript Unions | Accepted |
+| 2026-08-07 | ADR-018: Soft Delete via Status/DeletedAt | Accepted |
+| 2026-08-07 | ADR-019: updated_at via Service Layer (No DB Triggers) | Accepted |
+| 2026-08-07 | ADR-020: outfits.status over is_saved Flag | Accepted |
+| 2026-08-07 | ADR-021: AI Provider Abstraction over Direct OpenAI Usage | Accepted |
+| 2026-08-07 | ADR-022: Vision Responses Validated with Zod | Accepted |
+| 2026-08-07 | ADR-023: Embeddings Stored via Upsert, Retrieval via HNSW Cosine | Accepted |
+| 2026-08-07 | ADR-024: Recommendation Pipeline with Prompt Boundary | Accepted |
+| 2026-08-07 | ADR-025: OpenAI-Compatible Provider Configuration via Environment Variables | Accepted |
+| 2026-08-07 | ADR-026: Trust Layer — Evidence-Grounded Explanations | Accepted |
 
 ---
 
