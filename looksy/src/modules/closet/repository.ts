@@ -62,12 +62,7 @@ export class ClosetRepository {
       return [];
     }
 
-    const photos = await this.db
-      .select()
-      .from(itemPhotos)
-      .where(sql`${itemPhotos.itemId} in ${items.map((i) => i.id)}`)
-      .orderBy(asc(itemPhotos.sortOrder));
-
+    const photos = await this.findPhotosByItemIds(items.map((i) => i.id));
     const photosByItem = new Map<string, typeof photos>();
     for (const photo of photos) {
       const list = photosByItem.get(photo.itemId) ?? [];
@@ -79,6 +74,43 @@ export class ClosetRepository {
       ...item,
       photos: photosByItem.get(item.id) ?? [],
     }));
+  }
+
+  async findPhotosByItemIds(itemIds: string[]) {
+    if (itemIds.length === 0) {
+      return [];
+    }
+    return this.db
+      .select()
+      .from(itemPhotos)
+      .where(sql`${itemPhotos.itemId} in ${itemIds}`)
+      .orderBy(asc(itemPhotos.sortOrder));
+  }
+
+  async insertPhoto(
+    itemId: string,
+    input: {
+      url: string;
+      thumbnailUrl?: string | null;
+      storagePath?: string | null;
+      isPrimary?: boolean;
+      sortOrder?: number;
+      metadata?: { width?: number; height?: number; sizeBytes?: number } | null;
+    }
+  ) {
+    const rows = await this.db
+      .insert(itemPhotos)
+      .values({
+        itemId,
+        url: input.url,
+        thumbnailUrl: input.thumbnailUrl ?? null,
+        storagePath: input.storagePath ?? null,
+        isPrimary: input.isPrimary ?? false,
+        sortOrder: input.sortOrder ?? 0,
+        metadata: input.metadata ?? null,
+      })
+      .returning();
+    return rows[0]!;
   }
 
   async updateItem(itemId: string, input: UpdateClothingMetadataInput) {

@@ -23,7 +23,7 @@ const eslintConfig = defineConfig([
         {
           patterns: [
             {
-              group: ["@/modules/*/!(index)"],
+              group: ["@/modules/*/!(index|actions|server)"],
               message:
                 "Import from module internals is not allowed. Use the module's public API from index.ts.",
             },

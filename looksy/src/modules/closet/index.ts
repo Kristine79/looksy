@@ -9,6 +9,7 @@ export type {
 export { ClosetRepository } from "./repository";
 export { ClosetService } from "./service";
 export type {
+  AddItemPhotoInput,
   AddToWardrobeInput,
   ClothingItemRow,
   ItemPhotoRow,

@@ -4,13 +4,32 @@ Developer README — reflects the **current** state of the project, not the targ
 
 ## Project Description
 
-LOOKSY is a personal AI stylist: a web app that lets users build a digital wardrobe and receive AI-powered outfit suggestions that adapt to their style over time.
+LOOKSY is a **Personal Style Intelligence system**: a web app that builds a digital
+wardrobe from user photos and delivers AI outfit recommendations that are
+**explainable** — grounded in the user's real wardrobe, wear history, saved
+outfits and learned preferences (Fashion Memory).
 
-The long-term product vision (AI outfit recommendations, photo-based item import, fashion memory that learns user preferences, trust layer with explainable suggestions) is defined in [`docs/`](../docs), but the repository currently contains only the **MVP foundation: project setup and the data layer**. Product features are planned, not implemented.
+The product is phase-gated (see [`docs/IMPLEMENTATION_PLAN.md`](../docs/IMPLEMENTATION_PLAN.md)).
+The first user-facing experience (wardrobe + Today's Look + feedback loop) is
+live in Phase 6.
+
+## Current MVP Capabilities
+
+- **Digital Wardrobe** (`/dashboard/wardrobe`) — add items by photo; the vision
+  pipeline extracts type, colors, material, pattern, formality and seasons;
+  every item shows its AI status (analyzing / verified with confidence / failed + retry).
+- **Today's Look** (`/dashboard/recommendations`) — AI outfit from the user's own
+  wardrobe with a **Trust Layer**: "Why LOOKSY chose this" is backed by evidence
+  (palette, most-worn items, saved outfits, feedback actions) — never generic AI talk.
+- **Feedback loop** — ❤️ Love / 👕 Wore it / 🔄 Change item / 👎 Not for me;
+  every action records a signal through `FeedbackService` for Fashion Memory training.
+- **Fashion Memory UI** — "What LOOKSY has learned about you": memories with
+  confidence bars and signal counts.
+- **HTTP API** — `GET/POST /api/wardrobe`, `POST /api/recommendations`.
+- Works without any external signup in demo mode (seeded `demo_user`); Clerk
+  session flow is supported when configured.
 
 ## Current MVP Stage
-
-Development is phase-gated (see [`docs/IMPLEMENTATION_PLAN.md`](../docs/IMPLEMENTATION_PLAN.md)):
 
 | Phase | Status |
 |-------|--------|
@@ -20,7 +39,8 @@ Development is phase-gated (see [`docs/IMPLEMENTATION_PLAN.md`](../docs/IMPLEMEN
 | 3 — Application layer (domain modules) | Done |
 | 4 — AI Intelligence layer (provider abstraction, vision, embeddings, RAG) | Done |
 | 5 — AI Recommendation Engine (explainable recommendations, Trust Layer) | Done |
-| 6 — Outfit generation / UI | Planned |
+| 6 — Product Experience Layer (wardrobe UI, Today's Look, feedback loop) | Done |
+| 7 — Fashion Memory automation (auto-derived memories from signals) | Planned |
 
 Feature status:
 
@@ -30,16 +50,31 @@ Feature status:
 | Database schema, migration, seed script | Done |
 | Domain modules: users, closet, outfits, recommendations (schema → repository → service) | Done |
 | Fashion Memory: storage layer, repositories and manual services | Done |
-| Fashion Memory automation (auto-derived memories from signals) | Planned |
+| Fashion Memory automation (auto-derived memories from signals) | Planned (Phase 7) |
 | AI provider abstraction (OpenAI-compatible, env-configurable: `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`...) | Done |
 | Vision pipeline (photo → item metadata) | Done — `ClothingAnalysisService` + `gpt-4o-mini` |
-| Embeddings pipeline + HNSW retrieval (RAG) | Done |
+| Embeddings pipeline + pgvector retrieval (RAG) | Done |
 | AI Recommendation Engine: request → context → prompt → LLM → explainable recommendation | Done — see `docs/LOOKSY_RECOMMENDATION_ENGINE.md` |
 | Trust Layer (evidence-grounded explanations, owned-items-only guarantee) | Done |
-| Outfit generation & persistence of AI results | Planned (Phase 6) |
-| Clerk authentication | In development — dependency installed, integration planned |
-| UI / design system / application screens | Planned |
+| Outfit generation & persistence of AI results | Done — `POST /api/recommendations`, `getTodayLook` |
+| Digital Wardrobe UI + Add Clothing flow (photo → analysis → wardrobe) | Done — `/dashboard/wardrobe` |
+| Today's Look experience + Feedback Loop UI | Done — `/dashboard/recommendations` |
+| Clerk authentication | Partial — session + auto-provisioning supported; demo mode fallback |
+| Image storage (Supabase Storage, local data-URL fallback) | Done — `ImageStorageService` |
 | Production deployment | Planned (no deployment configuration yet) |
+
+## Screenshots
+
+_Screenshots will be added here as the UI stabilizes — currently at MVP visual stage
+(see `docs/LOOKSY_PRODUCT_EXPERIENCE.md` for user flows)._
+
+## User Flows
+
+1. **Add clothing** — upload photo → "Photo uploaded" → "LOOKSY is analyzing this item" → "Added to wardrobe". Failed analysis is retryable from the card.
+2. **Get a look** — pick an occasion → "Generate look" → outfit from your wardrobe + "Why LOOKSY chose this" evidence + confidence.
+3. **Teach LOOKSY** — Love / Wore it / Change item / Not for me → every reaction is recorded and feeds Fashion Memory.
+
+Detailed flows: [docs/LOOKSY_PRODUCT_EXPERIENCE.md](../docs/LOOKSY_PRODUCT_EXPERIENCE.md).
 
 ## Development Workflow
 
@@ -51,15 +86,16 @@ Full process: [Development Workflow](../docs/DEVELOPMENT_WORKFLOW.md)
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| Framework | Next.js 16 (App Router), React 19 | |
+| Framework | Next.js 16 (App Router), React 19 | Server Actions + API routes |
 | Language | TypeScript 5 (strict mode) | |
-| Styling | Tailwind CSS 4 | |
+| Styling | Tailwind CSS 4 | Design tokens in `globals.css` |
 | Database | PostgreSQL 16 + pgvector | Local via Docker Compose; managed option planned for production |
 | ORM | Drizzle ORM + postgres-js | Migrations, seed, Drizzle Studio |
-| Auth | Clerk (`@clerk/nextjs`) | Installed, integration planned |
-| AI | OpenAI SDK | Installed, providers planned (`src/modules/ai` defines contracts only) |
-| Validation | Zod | |
-| Testing | Vitest + Testing Library | Unit tests |
+| Auth | Clerk (`@clerk/nextjs`) | Session + auto-provisioning; demo-mode fallback |
+| AI | OpenAI SDK (OpenAI-compatible endpoints) | Vision, embeddings, generation — `src/modules/ai` |
+| Image storage | Supabase Storage | Local data-URL fallback for MVP |
+| Validation | Zod | Shared between actions and API routes |
+| Testing | Vitest + Testing Library | Unit + component tests |
 | Lint / Types | ESLint 9, `tsc --noEmit` | |
 | CI | GitHub Actions | lint, typecheck, test, build |
 
@@ -70,33 +106,48 @@ Full process: [Development Workflow](../docs/DEVELOPMENT_WORKFLOW.md)
 - `schema.ts` — Drizzle table definitions (single migration under `src/lib/db/migrations`)
 - `repository.ts` — data access
 - `service.ts` — business logic
+- `server.ts` — application orchestration (wires repositories + services + AI)
+- `actions.ts` — server actions ("use server") consumed by the UI
 - `types.ts` — domain types
 - `index.ts` — public API; cross-module imports are restricted to public APIs (enforced via ESLint)
 
+The UI layer (`src/components`, `src/app`) talks only to `actions`/`server` entry
+points — never directly to repositories or the database.
+
 Shared infrastructure (DB client, errors, logger, validators) lives in `src/lib`.
 
-The AI layer (`src/modules/ai`) defines provider contracts (`AIProvider`, `StyleProfileUpdater`, embeddings schema) with no provider implementation yet — the OpenAI integration is planned.
-
 Architecture decisions are documented in [`docs/ARCHITECTURE_DECISIONS.md`](../docs/ARCHITECTURE_DECISIONS.md).
+Product experience details: [`docs/LOOKSY_PRODUCT_EXPERIENCE.md`](../docs/LOOKSY_PRODUCT_EXPERIENCE.md).
 
 ## Project Structure
 
 ```
 looksy/
 ├── src/
-│   ├── app/                    # Next.js App Router (placeholder pages and route groups only)
+│   ├── app/                    # Next.js App Router
+│   │   ├── (dashboard)/        # /dashboard/* pages (wardrobe, recommendations)
+│   │   └── api/                # /api/wardrobe, /api/recommendations
+│   ├── components/             # Design system + feature components
+│   │   ├── ui/                 # Button, Badge, Skeleton, Spinner, EmptyState
+│   │   ├── clothing/           # ClothingCard, AddClothingForm, AiStatusBadge
+│   │   ├── outfits/            # OutfitCard, EvidenceBadge, FeedbackButtons
+│   │   ├── memory/             # MemoryCard
+│   │   └── recommendations/    # TodayLookExperience
 │   ├── modules/
-│   │   ├── auth/               # Clerk helpers (placeholder)
+│   │   ├── auth/               # Identity resolution (Clerk / demo mode)
 │   │   ├── users/              # Users, preferences
-│   │   ├── closet/             # Clothing items, photos
-│   │   ├── outfits/            # Outfits, wear log, feedback
-│   │   ├── recommendations/    # Fashion memories, style profiles
-│   │   ├── ai/                 # AI provider contracts (planned implementation)
+│   │   ├── closet/             # Clothing items, photos (+ actions, server)
+│   │   ├── outfits/            # Outfits, wear log, feedback (+ actions)
+│   │   ├── recommendations/    # Fashion memory, style profiles, engine (+ actions, server)
+│   │   ├── ai/                 # Provider abstraction, vision, embeddings, RAG
+│   │   ├── storage/            # Image storage abstraction
 │   │   ├── analytics/          # Events schema
 │   │   └── subscriptions/      # Stub (planned)
 │   └── lib/
 │       ├── db/                 # Client, schema, migrations, seed
 │       ├── errors.ts           # AppError hierarchy + API error handler
+│       ├── image.ts            # Client-side image resize (data URL)
+│       ├── occasions.ts        # Product constants (shared client/server)
 │       ├── logger.ts           # Structured logger
 │       └── validators.ts       # Zod schemas
 ├── docker-compose.yml          # Local PostgreSQL
@@ -119,7 +170,9 @@ docker-compose up -d
 
 # 3. Configure environment
 cp .env.example .env.local
-# Fill in DATABASE_URL (and Clerk keys when auth integration starts)
+# Fill in DATABASE_URL. For AI features (analysis + recommendations) set AI_API_KEY
+# (OpenAI or any OpenAI-compatible endpoint). Clerk keys are optional — without them
+# the app runs in demo mode using the seeded demo user.
 
 # 4. Apply migrations
 pnpm db:migrate
@@ -131,7 +184,8 @@ pnpm db:seed
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) and go to
+`/dashboard/recommendations` or `/dashboard/wardrobe`.
 
 ## Database Setup
 
@@ -155,7 +209,7 @@ pnpm test          # Run all tests once (Vitest)
 pnpm test:watch    # Watch mode
 ```
 
-Covered so far: shared lib (errors, logger, validators), closet service, outfit feedback service, recommendations (fashion memory) service.
+Covered so far: shared lib (errors, logger, validators), closet service, outfit feedback service, recommendations (fashion memory) service, AI providers, server actions (closet / recommendations / outfits), API routes (`/api/wardrobe`, `/api/recommendations`) and critical components (ClothingCard, AddClothingForm, FeedbackButtons, MemoryCard, EvidenceBadge).
 
 ## Environment Variables
 
@@ -164,9 +218,11 @@ See `.env.example`. Current requirements:
 | Variable | Required now? |
 |----------|---------------|
 | `DATABASE_URL` | Yes (local Drizzle setup) |
+| `AI_API_KEY` (or `OPENAI_API_KEY`) | Yes for AI analysis & recommendations |
 | `NEXT_PUBLIC_APP_URL` | Yes |
 | `LOG_LEVEL` | Optional (default `info`) |
-| Clerk keys, `OPENAI_API_KEY`, Supabase keys | Not yet — needed once auth / AI / storage are implemented |
+| Clerk keys | Optional — demo mode fallback |
+| Supabase URL / keys | Optional — image upload; local data-URL fallback |
 
 ## Available Scripts
 

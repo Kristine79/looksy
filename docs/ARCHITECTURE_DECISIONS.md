@@ -1,6 +1,6 @@
 # LOOKSY — Architecture Decisions
 
-> Version: 1.1 | Status: Active | Last updated: 2026-08-07
+> Version: 1.2 | Status: Active | Last updated: 2026-08-07
 > Purpose: Document all architectural decisions and their rationale
 
 ---
@@ -34,6 +34,10 @@
 25. [ADR-024: Recommendation Pipeline with Prompt Boundary](#25-adr-024-recommendation-pipeline-with-prompt-boundary)
 26. [ADR-025: OpenAI-Compatible Provider Configuration via Environment Variables](#26-adr-025-openai-compatible-provider-configuration-via-environment-variables)
 27. [ADR-026: Trust Layer — Evidence-Grounded Explanations](#27-adr-026-trust-layer--evidence-grounded-explanations)
+28. [ADR-027: UI as Thin Client — Server Actions & API as Sole Data Path](#28-adr-027-ui-as-thin-client--server-actions--api-as-sole-data-path)
+29. [ADR-028: Client-Safe Shared Constants in src/lib](#29-adr-028-client-safe-shared-constants-in-srclib)
+30. [ADR-029: Demo-Mode Auth Fallback](#30-adr-029-demo-mode-auth-fallback)
+31. [ADR-030: Image Storage Abstraction with Data-URL Fallback](#31-adr-030-image-storage-abstraction-with-data-url-fallback)
 
 ---
 
@@ -1046,6 +1050,141 @@ Recommendations must be explainable and personal: not "wear this" but "why this 
 
 ---
 
+## 28. ADR-027: UI as Thin Client — Server Actions & API as Sole Data Path
+
+**Status:** Accepted
+
+### Context
+
+Phase 6 adds the first user-facing screens (Wardrobe, Today's Look). Business rules (ownership, AI orchestration, feedback semantics) must never leak into React components; pages must work both via Server Actions (UX) and HTTP API (external clients).
+
+### Decision
+
+- Each module exposes exactly three entry points: `index.ts` (types), `actions.ts` (server actions), `server.ts` (application services).
+- ESLint `no-restricted-imports` forbids imports from `@/modules/*` except `index|actions|server` — components cannot reach repositories, db, or AI directly.
+- UI components orchestrate loading/error/empty states only; every mutation goes through an action that validates input with zod and resolves the user via `getCurrentUserId()`.
+- API routes are thin wrappers over the same `server.ts` functions with a single `handleApiError` response format.
+- Dashboard pages are `dynamic = "force-dynamic"` — user data is never statically prerendered.
+
+### Rationale
+
+- One implementation per concern: actions and routes share identical validation and ownership logic, so behavior cannot drift.
+- Compile-time enforcement (ESLint) beats convention — accidental leaks fail CI, not review.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Data fetching directly in components | Duplicates validation/ownership in every screen |
+| API routes only | Server Actions give better UX (streaming, form states) without extra code |
+
+### Consequences
+
+- Components depend only on action signatures and DTOs.
+- New screens require no permission logic — it lives in `server.ts`.
+
+---
+
+## 29. ADR-028: Client-Safe Shared Constants in src/lib
+
+**Status:** Accepted
+
+### Context
+
+`recommendations/server.ts` exported `OCCASIONS` (used by zod schema and UI). Importing it into a client component pulled the whole server module — including `postgres` — into the client bundle and broke `next build` ("module-not-found" for postgres).
+
+### Decision
+
+- Shared, dependency-free constants used by both server and client live in `src/lib/*.ts` (e.g. `src/lib/occasions.ts`).
+- Server modules re-export them under an alias (`OCCASIONS_LIST`) when a stable public name is needed.
+- The import boundary rule stays: client code may import from `src/lib` and module entry points only.
+
+### Rationale
+
+- Client bundles must never contain server-only dependencies; `src/lib` is the designated safe zone.
+- Build failures are caught by CI, but the rule prevents the class of error entirely.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Duplicate constant lists in client and server | Drift between zod validation and UI options |
+| Inline the constants in components | Same drift, worse discoverability |
+
+### Consequences
+
+- New shared constants (occasions, statuses, limits) follow the `src/lib` pattern.
+- `todayLookInputSchema` still validates against the single canonical list.
+
+---
+
+## 30. ADR-029: Demo-Mode Auth Fallback
+
+**Status:** Accepted
+
+### Context
+
+Phase 6 must be runnable and demoable without external signup (Clerk). Developers and investors need the product working end-to-end after `db:seed`, with no provider keys.
+
+### Decision
+
+- `getCurrentUserId()` resolves the user via Clerk session when `CLERK_SECRET_KEY` is set; otherwise it falls back to the seeded demo user (`demo_user`).
+- No production data path is weakened: ownership checks and validation are identical in both modes.
+- `.env.example` documents demo mode explicitly as an MVP convenience.
+
+### Rationale
+
+- Zero-config onboarding for local development and demos while keeping the real auth path active in production.
+- The fallback is a single resolution point, so it cannot be bypassed accidentally elsewhere.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Mandatory Clerk everywhere | Blocks demos and local setup without keys |
+| Mocking auth in components | Inconsistent with production behavior |
+
+### Consequences
+
+- Demo mode is visible only in how the user id is resolved; no other layer knows it exists.
+- Production deployments just set `CLERK_SECRET_KEY` — no code change.
+
+---
+
+## 31. ADR-030: Image Storage Abstraction with Data-URL Fallback
+
+**Status:** Accepted
+
+### Context
+
+Wardrobe items require photos. Supabase Storage needs project setup and credentials; the MVP must also work fully local.
+
+### Decision
+
+- `ImageStorageService` exposes `uploadItemPhoto()`/`resolvePhotoUrl()` behind a stable interface.
+- When Supabase credentials are configured: upload to the bucket, store the storage path, serve via the CDN URL.
+- Otherwise: store the resized photo as a data URL in `storage_path` (MVP fallback), `isLocalPhoto()` marks it for client-side rendering.
+- Client-side resize (max 1000px, JPEG 0.85) happens in `src/lib/image.ts` before upload/encode to bound payload size.
+
+### Rationale
+
+- Callers never branch on storage mode — the abstraction keeps UI and services unchanged when S3/GCS replaces the fallback.
+- Data URLs are acceptable for MVP scale; the interface is the durable part.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Require storage credentials | Product dead on arrival locally |
+| Store base64 in DB as final design | Bloat and no CDN; fallback only |
+
+### Consequences
+
+- `resolvePhotoUrl` returns either a CDN URL or a data URL; components must call it (not raw paths).
+- Adding S3/GCS later is a single-implementation swap.
+
+---
+
 ## Appendix: Decision Log
 
 | Date | Decision | Status |
@@ -1076,6 +1215,10 @@ Recommendations must be explainable and personal: not "wear this" but "why this 
 | 2026-08-07 | ADR-024: Recommendation Pipeline with Prompt Boundary | Accepted |
 | 2026-08-07 | ADR-025: OpenAI-Compatible Provider Configuration via Environment Variables | Accepted |
 | 2026-08-07 | ADR-026: Trust Layer — Evidence-Grounded Explanations | Accepted |
+| 2026-08-07 | ADR-027: UI as Thin Client — Server Actions & API as Sole Data Path | Accepted |
+| 2026-08-07 | ADR-028: Client-Safe Shared Constants in src/lib | Accepted |
+| 2026-08-07 | ADR-029: Demo-Mode Auth Fallback | Accepted |
+| 2026-08-07 | ADR-030: Image Storage Abstraction with Data-URL Fallback | Accepted |
 
 ---
 

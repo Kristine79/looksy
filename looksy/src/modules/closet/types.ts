@@ -41,6 +41,15 @@ export interface WardrobeQuery {
   offset?: number;
 }
 
+export interface AddItemPhotoInput {
+  url: string;
+  thumbnailUrl?: string | null;
+  storagePath?: string | null;
+  isPrimary?: boolean;
+  sortOrder?: number;
+  metadata?: { width?: number; height?: number; sizeBytes?: number } | null;
+}
+
 export interface WardrobeItemWithPhotos extends ClothingItemRow {
   photos: ItemPhotoRow[];
 }
