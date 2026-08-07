@@ -1,0 +1,13 @@
+# Common
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
