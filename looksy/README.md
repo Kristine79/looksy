@@ -4,7 +4,7 @@ A trusted AI stylist that learns your personal style over time.
 
 ## Tech Stack
 
-- **Framework:** Next.js 15 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript (strict mode)
 - **Styling:** Tailwind CSS 4
 - **Database:** PostgreSQL + pgvector (via Supabase)

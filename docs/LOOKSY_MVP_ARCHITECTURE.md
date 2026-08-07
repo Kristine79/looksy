@@ -70,7 +70,7 @@
 │                      CLIENT BROWSER                       │
 │                                                          │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │              Next.js 15 (App Router)               │  │
+│  │              Next.js 16 (App Router)               │  │
 │  │                                                    │  │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │  │
 │  │  │  React   │  │  shadcn  │  │   TanStack   │   │  │
@@ -293,7 +293,7 @@ No circular dependencies. Analytics and subscriptions are leaf modules that read
 
 | Layer | Technology | Version | Why |
 |-------|-----------|---------|-----|
-| **Framework** | Next.js | 15.x | App Router, Server Actions, streaming, React 19 |
+| **Framework** | Next.js | 16.x | App Router, Server Actions, streaming, React 19 |
 | **Language** | TypeScript | 5.x | End-to-end type safety |
 | **React** | React | 19.x | Server Components, Suspense, use() |
 | **Styling** | Tailwind CSS | 4.x | Utility-first, design system foundation |

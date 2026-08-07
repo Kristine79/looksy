@@ -31,7 +31,7 @@ These are assumptions we're making that should be validated during implementatio
 
 | # | Assumption | Risk | Validation Method |
 |---|------------|------|-------------------|
-| D-1 | Team has Next.js 15 experience | Medium | Code review |
+| D-1 | Team has Next.js 16 experience | Medium | Code review |
 | D-2 | Team has Drizzle ORM experience | Medium | Prototype first |
 | D-3 | Team has Tailwind CSS experience | Low | Standard stack |
 | D-4 | TypeScript strict mode is manageable | Low | Incremental adoption |

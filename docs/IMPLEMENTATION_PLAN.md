@@ -97,7 +97,7 @@ Each phase does NOT:
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| Next.js | 15.x | App Router, React 19 |
+| Next.js | 16.x | App Router, React 19 |
 | TypeScript | 5.x | Strict mode |
 | Tailwind CSS | 4.x | Styling |
 | shadcn/ui | latest | Component library |

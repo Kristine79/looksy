@@ -1,6 +1,6 @@
 # LOOKSY — Architecture Decisions
 
-> Version: 1.0 | Status: Active | Last updated: 2026-07-22
+> Version: 1.1 | Status: Active | Last updated: 2026-08-07
 > Purpose: Document all architectural decisions and their rationale
 
 ---
@@ -17,6 +17,7 @@
 8. [ADR-007: Error Handling](#8-adr-007-error-handling)
 9. [ADR-008: Testing Strategy](#9-adr-008-testing-strategy)
 10. [ADR-009: Deployment](#10-adr-009-deployment)
+11. [ADR-010: Next.js 16 over Next.js 15](#11-adr-010-nextjs-16-over-nextjs-15)
 
 ---
 
@@ -468,6 +469,51 @@ Merged to Main → All checks → Production Deploy → Smoke Test
 
 ---
 
+## 11. ADR-010: Next.js 16 over Next.js 15
+
+**Status:** Accepted
+
+### Context
+
+The MVP architecture documentation specified Next.js 15.x. During Phase 1, `create-next-app` scaffolded the project with Next.js 16.2.11 (current stable line). We must decide whether to pin Next.js 15 to match the documentation or accept Next.js 16 and update the docs.
+
+### Decision
+
+**Accept Next.js 16.2.11 as the framework version and update all documentation to reflect it.** No version downgrade.
+
+### Rationale
+
+1. **The codebase already works on Next.js 16.** Phase 1 verification: build (Turbopack), lint, typecheck, and 16 tests all pass on 16.2.11. The code was already adapted to Next 16 conventions (`src/proxy.ts` instead of `middleware.ts`).
+2. **Downgrade is a high-risk operation.** The project's environment has a slow/unstable npm registry connection — downloading `next` tarballs timed out 4 times during initial setup. A downgrade requires reinstalling `next`, `eslint-config-next`, and potentially React 19.2 → 19.1, re-running the SWC binary lottery. All risk for zero functional gain.
+3. **Next.js 16 is the current stable release** (not beta), with production-grade conventions. Sticking with it avoids future forced migration.
+4. **Documentation drift is a documentation problem, not an architecture problem.** The architectural decisions in LOOKSY_MVP_ARCHITECTURE.md (App Router, Server Components, modular monolith, Server Actions) are version-agnostic. The doc's version pin was written when 15 was current.
+5. **Key breaking changes are already absorbed:** `middleware` → `proxy` convention (documented in Next 16), Turbopack default build.
+
+### Breaking Changes Absorbed (Next 15 → 16)
+
+| Change | Impact | Status |
+|--------|--------|--------|
+| `middleware.ts` → `proxy.ts` | Route-level middleware file convention | ✅ Adapted (`src/proxy.ts`) |
+| Turbopack default | Faster builds, no config needed | ✅ Working |
+| React 19.2 | Runtime pairing with Next 16 | ✅ Installed |
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Downgrade to Next.js 15 | Requires risky package reinstallation on a slow network; rewrite of `proxy.ts` → `middleware.ts`; React downgrade; no benefit — 15 is now the older line |
+| Keep docs at 15, code at 16 | Creates permanent documentation/code mismatch, future confusion |
+
+### Consequences
+
+- `LOOKSY_MVP_ARCHITECTURE.md` and related docs must be updated to say Next.js 16.x
+- `TECHNICAL_ASSUMEPTIONS_AND_QUESTIONS.md` assumption D-1 updated
+- `README.md` tech stack updated
+- Future framework upgrades follow standard Next.js upgrade guides
+- CI uses `eslint-config-next` 16.2.11 (already aligned)
+
+---
+
 ## Appendix: Decision Log
 
 | Date | Decision | Status |
@@ -481,6 +527,7 @@ Merged to Main → All checks → Production Deploy → Smoke Test
 | 2026-07-22 | ADR-007: Error Handling | Accepted |
 | 2026-07-22 | ADR-008: Testing Strategy | Accepted |
 | 2026-07-22 | ADR-009: Deployment | Accepted |
+| 2026-08-07 | ADR-010: Next.js 16 over Next.js 15 | Accepted |
 
 ---
 
