@@ -33,24 +33,50 @@ export class EmbeddingsRepository {
     return rows[0]!;
   }
 
+  /**
+   * Finds similar items, one row per item. An item can hold several embedding
+   * rows (one per model — e.g. the semantic model plus the deterministic
+   * fallback after a provider failure), so we dedupe by item and prefer the
+   * non-fallback model before ranking by distance.
+   */
   async findSimilarItems(
     userId: string,
     embedding: number[],
     limit: number
   ): Promise<SimilarItem[]> {
     const vectorLiteral = `[${embedding.join(",")}]`;
+    const distance = sql<number>`${itemEmbeddings.embedding} <=> ${vectorLiteral}::vector`.as(
+      "distance"
+    );
+    const modelPriority = sql<number>`case when ${itemEmbeddings.model} = 'deterministic-fallback-v1' then 1 else 0 end`.as(
+      "model_priority"
+    );
+
+    const bestEmbedding = this.db
+      .selectDistinctOn(
+        [itemEmbeddings.itemId],
+        {
+          itemId: itemEmbeddings.itemId,
+          distance,
+          modelPriority,
+        }
+      )
+      .from(itemEmbeddings)
+      .where(eq(itemEmbeddings.userId, userId))
+      .orderBy(itemEmbeddings.itemId, modelPriority, distance)
+      .as("best_embedding");
+
     const rows = await this.db
       .select({
         item: clothingItems,
-        distance: sql<number>`${itemEmbeddings.embedding} <=> ${vectorLiteral}::vector`,
+        distance: bestEmbedding.distance,
       })
-      .from(itemEmbeddings)
-      .innerJoin(clothingItems, eq(clothingItems.id, itemEmbeddings.itemId))
-      .where(eq(itemEmbeddings.userId, userId))
-      .orderBy(sql`${itemEmbeddings.embedding} <=> ${vectorLiteral}::vector`)
+      .from(bestEmbedding)
+      .innerJoin(clothingItems, eq(clothingItems.id, bestEmbedding.itemId))
+      .orderBy(bestEmbedding.distance)
       .limit(limit);
 
-    return rows.map(({ item, distance }) => ({ item, distance }));
+    return rows.map(({ item, distance: d }) => ({ item, distance: d }));
   }
 
   async findEmbeddingByItemId(itemId: string) {
