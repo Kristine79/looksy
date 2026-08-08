@@ -6,6 +6,7 @@ import { getCurrentUserId } from "@/modules/auth/server";
 import { db } from "@/lib/db/client";
 import { FeedbackService, OutfitsRepository } from "@/modules/outfits";
 import { createMemoryAutomationHook } from "@/modules/recommendations/server";
+import { ANALYTICS_EVENTS, emitEvent } from "@/modules/analytics";
 import type { MemoryAutomationHook } from "@/modules/outfits/feedbackService";
 
 /**
@@ -34,6 +35,7 @@ export async function loveOutfitAction(outfitId: string) {
   const userId = await getCurrentUserId();
   itemIdSchema.parse(outfitId);
   await feedbackService().recordSave(userId, { outfitId });
+  emitEvent(userId, ANALYTICS_EVENTS.OUTFIT_SAVED, { outfitId });
   revalidatePath("/dashboard/recommendations");
   return { ok: true };
 }
@@ -47,6 +49,7 @@ export async function woreOutfitAction(outfitId: string, itemIds: string[]) {
     itemIds: parsedIds,
     source: "recommendation",
   });
+  emitEvent(userId, ANALYTICS_EVENTS.OUTFIT_WORN, { outfitId, itemCount: parsedIds.length });
   revalidatePath("/dashboard/recommendations");
   return { ok: true };
 }
@@ -73,6 +76,7 @@ export async function notForMeAction(outfitId: string) {
   const userId = await getCurrentUserId();
   itemIdSchema.parse(outfitId);
   await feedbackService().recordSkip(userId, { outfitId });
+  emitEvent(userId, ANALYTICS_EVENTS.OUTFIT_SKIPPED, { outfitId });
   revalidatePath("/dashboard/recommendations");
   return { ok: true };
 }

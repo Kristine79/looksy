@@ -77,8 +77,8 @@ export function AddClothingForm({ autoFocus = false }: AddClothingFormProps) {
         setPhase("added");
       }
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong — please try again");
+    } catch {
+      setError("Something went wrong — please try again");
       setPhase("error");
     } finally {
       setBusy(false);
@@ -94,11 +94,11 @@ export function AddClothingForm({ autoFocus = false }: AddClothingFormProps) {
       const outcome = await reprocessItemAction(itemId);
       setPhase(outcome.status === "completed" ? "added" : "error");
       if (outcome.status !== "completed") {
-        setError("Analysis failed again — check your AI provider configuration.");
+        setError("LOOKSY couldn't analyze this item right now. You can retry.");
       }
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Retry failed — please try again");
+    } catch {
+      setError("Something went wrong — please try again");
       setPhase("error");
     } finally {
       setBusy(false);

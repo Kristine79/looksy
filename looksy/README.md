@@ -11,10 +11,13 @@ outfits and learned preferences (Fashion Memory).
 
 The product is phase-gated (see [`docs/IMPLEMENTATION_PLAN.md`](../docs/IMPLEMENTATION_PLAN.md)).
 The first user-facing experience (wardrobe + Today's Look + feedback loop) is
-live in Phase 6.
+live in Phase 6; Fashion Memory automation landed in Phase 7; Phase 8
+(onboarding, demo mode, reliability polish) prepares the MVP for external demos.
 
 ## Current MVP Capabilities
 
+- **First-time onboarding** — a welcome state on the dashboard explains LOOKSY
+  in three steps; new accounts can load a one-click sample wardrobe.
 - **Digital Wardrobe** (`/dashboard/wardrobe`) — add items by photo; the vision
   pipeline extracts type, colors, material, pattern, formality and seasons;
   every item shows its AI status (analyzing / verified with confidence / failed + retry).
@@ -25,9 +28,18 @@ live in Phase 6.
   every action records a signal through `FeedbackService` for Fashion Memory training.
 - **Fashion Memory UI** — "What LOOKSY has learned about you": memories with
   confidence bars and signal counts.
+- **Demo mode** — the seeded `demo_user` (via `pnpm db:seed`) shows a realistic
+  wardrobe, outfits, wear history and memories; a banner clearly marks demo data.
+  Any account can also load a sample wardrobe from onboarding.
 - **HTTP API** — `GET/POST /api/wardrobe`, `POST /api/recommendations`.
+- **Internal analytics** — best-effort product events
+  (`item_added`, `ai_analysis_completed`, `outfit_generated`, `outfit_worn`, …)
+  written to `analytics_events`; no external platform.
 - Works without any external signup in demo mode (seeded `demo_user`); Clerk
   session flow is supported when configured.
+
+See [`docs/LOOKSY_PRODUCT_READINESS.md`](../docs/LOOKSY_PRODUCT_READINESS.md) for the
+current user journey, demo flow and known MVP limitations.
 
 ## Current MVP Stage
 
@@ -40,7 +52,8 @@ live in Phase 6.
 | 4 — AI Intelligence layer (provider abstraction, vision, embeddings, RAG) | Done |
 | 5 — AI Recommendation Engine (explainable recommendations, Trust Layer) | Done |
 | 6 — Product Experience Layer (wardrobe UI, Today's Look, feedback loop) | Done |
-| 7 — Fashion Memory automation (auto-derived memories from signals) | Planned |
+| 7 — Fashion Memory automation (auto-derived memories from signals) | Done |
+| 8 — Product polish & demo readiness (onboarding, demo mode, reliability) | Done |
 
 Feature status:
 
@@ -50,7 +63,7 @@ Feature status:
 | Database schema, migration, seed script | Done |
 | Domain modules: users, closet, outfits, recommendations (schema → repository → service) | Done |
 | Fashion Memory: storage layer, repositories and manual services | Done |
-| Fashion Memory automation (auto-derived memories from signals) | Planned (Phase 7) |
+| Fashion Memory automation (auto-derived memories from signals) | Done (Phase 7) |
 | AI provider abstraction (OpenAI-compatible, env-configurable: `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`...) | Done |
 | Vision pipeline (photo → item metadata) | Done — `ClothingAnalysisService` + `gpt-4o-mini` |
 | Embeddings pipeline + pgvector retrieval (RAG) | Done |
@@ -59,6 +72,10 @@ Feature status:
 | Outfit generation & persistence of AI results | Done — `POST /api/recommendations`, `getTodayLook` |
 | Digital Wardrobe UI + Add Clothing flow (photo → analysis → wardrobe) | Done — `/dashboard/wardrobe` |
 | Today's Look experience + Feedback Loop UI | Done — `/dashboard/recommendations` |
+| First-time onboarding (welcome state, sample wardrobe CTA) | Done (Phase 8) |
+| Demo mode (banner, one-click sample wardrobe, seeded demo user) | Done (Phase 8) |
+| AI failure UX (sanitized errors, fallback looks, error boundaries) | Done (Phase 8) |
+| Internal product analytics (event abstraction, no external platform) | Done (Phase 8) |
 | Clerk authentication | Partial — session + auto-provisioning supported; demo mode fallback |
 | Image storage (Supabase Storage, local data-URL fallback) | Done — `ImageStorageService` |
 | Production deployment | Planned (no deployment configuration yet) |
@@ -70,11 +87,29 @@ _Screenshots will be added here as the UI stabilizes — currently at MVP visual
 
 ## User Flows
 
-1. **Add clothing** — upload photo → "Photo uploaded" → "LOOKSY is analyzing this item" → "Added to wardrobe". Failed analysis is retryable from the card.
-2. **Get a look** — pick an occasion → "Generate look" → outfit from your wardrobe + "Why LOOKSY chose this" evidence + confidence.
-3. **Teach LOOKSY** — Love / Wore it / Change item / Not for me → every reaction is recorded and feeds Fashion Memory.
+1. **First visit (onboarding)** — welcome banner explains the product in three
+   steps; empty accounts get a one-click "Explore with a sample wardrobe" button.
+2. **Add clothing** — upload photo → "Photo uploaded" → "LOOKSY is analyzing this item" → "Added to wardrobe". Failed analysis is retryable from the card.
+3. **Get a look** — pick an occasion → "Generate look" → outfit from your wardrobe + "Why LOOKSY chose this" evidence + confidence.
+4. **Teach LOOKSY** — Love / Wore it / Change item / Not for me → every reaction is recorded and feeds Fashion Memory.
 
-Detailed flows: [docs/LOOKSY_PRODUCT_EXPERIENCE.md](../docs/LOOKSY_PRODUCT_EXPERIENCE.md).
+Detailed flows: [docs/LOOKSY_PRODUCT_EXPERIENCE.md](../docs/LOOKSY_PRODUCT_EXPERIENCE.md) and
+[docs/LOOKSY_PRODUCT_READINESS.md](../docs/LOOKSY_PRODUCT_READINESS.md).
+
+## Demo Instructions
+
+Two ways to demo LOOKSY without creating data manually:
+
+1. **Seeded demo user (recommended for local demo)** — run `pnpm db:seed` and
+   open the app without Clerk keys: you sign in as `demo_user` with a full
+   sample wardrobe (12 items, 4 outfits, wear history, 4 fashion memories).
+   A banner marks demo mode.
+2. **One-click sample wardrobe** — with Clerk configured, a fresh account sees
+   the onboarding banner with an "Explore with a sample wardrobe" button that
+   loads 6 items, 2 outfits and 2 memories (no AI calls needed).
+
+Demo flow to present: Today's Look → "Why LOOKSY chose this" → give feedback →
+watch the Fashion Memory section update.
 
 ## Development Workflow
 
@@ -132,16 +167,18 @@ looksy/
 │   │   ├── clothing/           # ClothingCard, AddClothingForm, AiStatusBadge
 │   │   ├── outfits/            # OutfitCard, EvidenceBadge, FeedbackButtons
 │   │   ├── memory/             # MemoryCard
+│   │   ├── onboarding/         # OnboardingBanner, DemoModeBanner
 │   │   └── recommendations/    # TodayLookExperience
 │   ├── modules/
 │   │   ├── auth/               # Identity resolution (Clerk / demo mode)
-│   │   ├── users/              # Users, preferences
+│   │   ├── users/              # Users, preferences (+ onboarding action)
 │   │   ├── closet/             # Clothing items, photos (+ actions, server)
 │   │   ├── outfits/            # Outfits, wear log, feedback (+ actions)
 │   │   ├── recommendations/    # Fashion memory, style profiles, engine (+ actions, server)
 │   │   ├── ai/                 # Provider abstraction, vision, embeddings, RAG
+│   │   ├── demo/               # Sample wardrobe injection (onboarding demo mode)
 │   │   ├── storage/            # Image storage abstraction
-│   │   ├── analytics/          # Events schema
+│   │   ├── analytics/          # Event schema + best-effort tracker
 │   │   └── subscriptions/      # Stub (planned)
 │   └── lib/
 │       ├── db/                 # Client, schema, migrations, seed
@@ -209,7 +246,7 @@ pnpm test          # Run all tests once (Vitest)
 pnpm test:watch    # Watch mode
 ```
 
-Covered so far: shared lib (errors, logger, validators), closet service, outfit feedback service, recommendations (fashion memory) service, AI providers, server actions (closet / recommendations / outfits), API routes (`/api/wardrobe`, `/api/recommendations`) and critical components (ClothingCard, AddClothingForm, FeedbackButtons, MemoryCard, EvidenceBadge).
+Covered so far: shared lib (errors, logger, validators), closet service, outfit feedback service, recommendations (fashion memory + today-look fallback contract), AI providers, clothing analysis (incl. sanitized errors), server actions (closet / recommendations / outfits / users / demo), API routes (`/api/wardrobe`, `/api/recommendations`), analytics tracker, demo content injection and critical components (ClothingCard, AddClothingForm, FeedbackButtons, MemoryCard, EvidenceBadge, TodayLookExperience, OnboardingBanner).
 
 ## Environment Variables
 

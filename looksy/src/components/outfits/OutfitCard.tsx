@@ -24,12 +24,12 @@ export function OutfitCard({ look, swapCandidates = [], onRecorded, onRegenerate
 
   return (
     <article className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-      <header className="flex items-center justify-between gap-3 border-b border-neutral-100 px-5 py-4">
-        <div>
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 px-5 py-4">
+        <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-600">
             Today&apos;s Look
           </p>
-          <h2 className="text-lg font-semibold text-neutral-900">{look.name}</h2>
+          <h2 className="truncate text-lg font-semibold text-neutral-900">{look.name}</h2>
         </div>
         <div className="text-right">
           {confidence > 0 ? (
@@ -58,6 +58,8 @@ export function OutfitCard({ look, swapCandidates = [], onRecorded, onRegenerate
                     <img
                       src={imageUrl}
                       alt={`${entry.item.type} in this look`}
+                      loading="lazy"
+                      decoding="async"
                       className="aspect-[3/4] w-full object-cover"
                     />
                   ) : (

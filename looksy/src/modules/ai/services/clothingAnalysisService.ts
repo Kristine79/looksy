@@ -10,6 +10,14 @@ export type AnalysisOutcome =
   | { status: "completed"; itemId: string; analysis: ClothingAnalysisResult }
   | { status: "failed"; itemId: string; error: string };
 
+/**
+ * User-facing analysis error. Raw provider errors are logged, never persisted
+ * or returned: `aiError` and `AnalysisOutcome.error` must stay non-technical
+ * so no API response or UI ever exposes an OpenAI message.
+ */
+export const ANALYSIS_ERROR_MESSAGE =
+  "LOOKSY couldn't analyze this item right now. You can retry.";
+
 export class ClothingAnalysisService {
   constructor(
     private readonly provider: AIProvider,
@@ -81,14 +89,14 @@ export class ClothingAnalysisService {
       logger.info("clothing_analysis_completed", { itemId, category: analysis.category });
       return { status: "completed", itemId, analysis };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      logger.error("clothing_analysis_failed", { itemId, error: message });
+      const raw = error instanceof Error ? error.message : "unknown error";
+      logger.error("clothing_analysis_failed", { itemId, error: raw });
       await this.closetRepository.updateAiMetadata(itemId, {
         aiStatus: "failed",
-        aiError: message,
+        aiError: ANALYSIS_ERROR_MESSAGE,
         aiProcessedAt: new Date(),
       });
-      return { status: "failed", itemId, error: message };
+      return { status: "failed", itemId, error: ANALYSIS_ERROR_MESSAGE };
     }
   }
 

@@ -32,6 +32,7 @@ import type {
   RecommendationResult,
 } from "@/modules/recommendations";
 import type { MemoryAutomationHook } from "@/modules/outfits/feedbackService";
+import { ANALYTICS_EVENTS, emitEvent } from "@/modules/analytics";
 
 export const OCCASIONS_LIST = OCCASIONS;
 
@@ -173,8 +174,14 @@ export async function getTodayLook(
       candidatesLimit: 12,
     });
   } catch (error) {
-    const code = error instanceof AIError ? error.code : "UNKNOWN";
-    const retryable = error instanceof AIError ? error.retryable : false;
+    // Only AI/provider failures degrade into the deterministic fallback.
+    // Everything else (DB outage, validation, bugs) must propagate so it is
+    // not masked as "AI is unavailable" and can be surfaced correctly.
+    if (!(error instanceof AIError)) {
+      throw error;
+    }
+    const code = error.code;
+    const retryable = error.retryable;
     logger.warn("recommendation_fallback", {
       code,
       retryable,
@@ -223,6 +230,13 @@ export async function getTodayLook(
   );
 
   const items = await resolveLookItems(userId, result.items);
+
+  emitEvent(userId, ANALYTICS_EVENTS.OUTFIT_GENERATED, {
+    outfitId: outfit.id,
+    degraded,
+    model: result.model,
+    itemCount: items.length,
+  });
 
   return {
     outfitId: outfit.id,

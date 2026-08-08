@@ -54,8 +54,8 @@ export function TodayLookExperience({
       setLook(result.look);
       setDegradedNotice(result.degraded ? result.message ?? null : null);
       return result.look;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not generate a look right now");
+    } catch {
+      setError("We couldn't build a look right now. Please try again in a moment.");
       setDegradedNotice(null);
       return null;
     } finally {
@@ -129,7 +129,7 @@ export function TodayLookExperience({
               Try again
             </Button>
           </div>
-        ) : look ? (
+        ) : look && look.items.length > 0 ? (
           <div className="space-y-3">
             {degradedNotice && (
               <div
@@ -149,6 +149,16 @@ export function TodayLookExperience({
               }}
             />
           </div>
+        ) : look ? (
+          <EmptyState
+            title="Your wardrobe is empty"
+            description="Add a few items to your wardrobe and LOOKSY will start building looks that match your style."
+            action={
+              <Button type="button" onClick={runGenerate} loading={generating}>
+                Generate my first look
+              </Button>
+            }
+          />
         ) : (
           <EmptyState
             title={wardrobeCount === 0 ? "Your wardrobe is empty" : "Ready when you are"}

@@ -1,6 +1,7 @@
 import { UnauthorizedError } from "@/lib/errors";
 import { db } from "@/lib/db/client";
 import { UsersRepository } from "@/modules/users";
+import { ANALYTICS_EVENTS, emitEvent } from "@/modules/analytics";
 
 /**
  * Demo fallback identity used until Clerk is configured.
@@ -31,6 +32,7 @@ export async function getCurrentUserId(): Promise<string> {
       const clerkUser = await fetchClerkUser(clerkUserId);
       if (clerkUser) {
         const created = await usersRepository.create(clerkUser);
+        emitEvent(created.id, ANALYTICS_EVENTS.USER_CREATED, { source: "clerk" });
         return created.id;
       }
       throw new UnauthorizedError("Clerk user could not be provisioned");

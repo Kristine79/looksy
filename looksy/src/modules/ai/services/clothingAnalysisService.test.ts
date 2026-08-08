@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { ClothingAnalysisService } from "./clothingAnalysisService";
+import { ClothingAnalysisService, ANALYSIS_ERROR_MESSAGE } from "./clothingAnalysisService";
 import { validateClothingAnalysis } from "../validation";
 import type { AIProvider, ClothingAnalysisWithConfidence } from "../types";
 import type { EmbeddingsRepository } from "../repository";
@@ -150,7 +150,7 @@ describe("ClothingAnalysisService", () => {
     );
   });
 
-  it("marks the item as failed and persists the error when vision fails", async () => {
+  it("marks the item as failed and persists a sanitized error when vision fails", async () => {
     (provider.analyzeClothingImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error("vision timeout")
     );
@@ -158,9 +158,10 @@ describe("ClothingAnalysisService", () => {
     const outcome = await service.analyzeClothingItem("user-1", "item-1", "https://img.example/photo.jpg");
 
     expect(outcome).toMatchObject({ status: "failed", itemId: "item-1" });
+    expect(outcome).toMatchObject({ error: ANALYSIS_ERROR_MESSAGE });
     expect(closetRepo.updateAiMetadata).toHaveBeenCalledWith(
       "item-1",
-      expect.objectContaining({ aiStatus: "failed", aiError: expect.stringContaining("vision timeout") })
+      expect.objectContaining({ aiStatus: "failed", aiError: ANALYSIS_ERROR_MESSAGE })
     );
   });
 

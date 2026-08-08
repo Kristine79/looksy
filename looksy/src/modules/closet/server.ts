@@ -10,6 +10,7 @@ import {
 } from "@/modules/ai";
 import type { AnalysisOutcome } from "@/modules/ai";
 import { ImageStorageService, resolvePhotoUrl } from "@/modules/storage";
+import { ANALYTICS_EVENTS, emitEvent } from "@/modules/analytics";
 
 export const IMAGE_DATA_MAX_LENGTH = 2_000_000;
 
@@ -75,6 +76,15 @@ export async function addClothingItemWithAnalysis(
     userId,
     item.id,
     resolvePhotoUrl(photo)
+  );
+
+  emitEvent(userId, ANALYTICS_EVENTS.ITEM_ADDED, { itemId: item.id });
+  emitEvent(
+    userId,
+    analysis.status === "completed"
+      ? ANALYTICS_EVENTS.AI_ANALYSIS_COMPLETED
+      : ANALYTICS_EVENTS.AI_ANALYSIS_FAILED,
+    { itemId: item.id }
   );
 
   const freshItem = await closetRepository.findItemById(item.id);
