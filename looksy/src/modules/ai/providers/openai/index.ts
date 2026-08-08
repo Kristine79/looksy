@@ -42,7 +42,10 @@ export class OpenAIProvider implements AIProvider {
   async analyzeClothingImage(
     request: ClothingAnalysisRequest
   ): Promise<ClothingAnalysisWithConfidence> {
-    return analyzeClothingImage(this.getClient(), request);
+    return analyzeClothingImage(this.getClient(), {
+      ...request,
+      model: request.model ?? this.visionModel,
+    });
   }
 
   async generateRecommendation(request: GenerateRecommendationRequest): Promise<GeneratedText> {

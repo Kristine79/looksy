@@ -1,3 +1,10 @@
+import {
+  InvalidAIResponseError,
+  ProviderConfigurationError,
+  ProviderRateLimitError,
+  ProviderTimeoutError,
+} from "@/modules/ai";
+
 export class AppError extends Error {
   constructor(
     message: string,
@@ -38,6 +45,12 @@ export class ForbiddenError extends AppError {
   }
 }
 
+export class ServiceUnavailableError extends AppError {
+  constructor(message: string = "Service temporarily unavailable") {
+    super(message, "SERVICE_UNAVAILABLE", 503);
+  }
+}
+
 export function handleApiError(error: unknown) {
   if (error instanceof AppError) {
     return Response.json(
@@ -49,6 +62,40 @@ export function handleApiError(error: unknown) {
         },
       },
       { status: error.statusCode }
+    );
+  }
+
+  if (error instanceof ProviderConfigurationError) {
+    return Response.json(
+      {
+        error: {
+          code: "AI_CONFIGURATION_ERROR",
+          message: "AI provider is not configured. Set AI_API_KEY in the environment.",
+        },
+      },
+      { status: 503 }
+    );
+  }
+  if (error instanceof ProviderTimeoutError || error instanceof ProviderRateLimitError) {
+    return Response.json(
+      {
+        error: {
+          code: "AI_PROVIDER_UNAVAILABLE",
+          message: "The AI provider is temporarily unavailable. Please try again.",
+        },
+      },
+      { status: 503 }
+    );
+  }
+  if (error instanceof InvalidAIResponseError) {
+    return Response.json(
+      {
+        error: {
+          code: "AI_RESPONSE_INVALID",
+          message: "The AI provider returned an invalid response. Please retry.",
+        },
+      },
+      { status: 502 }
     );
   }
 

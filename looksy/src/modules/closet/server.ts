@@ -77,9 +77,10 @@ export async function addClothingItemWithAnalysis(
     resolvePhotoUrl(photo)
   );
 
+  const freshItem = await closetRepository.findItemById(item.id);
   const photos = await closetRepository.findPhotosByItemIds([item.id]);
   return {
-    item: { ...item, photos },
+    item: { ...(freshItem ?? item), photos },
     analysis,
   };
 }

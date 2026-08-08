@@ -22,6 +22,12 @@ const DEMO_CLERK_ID = "demo_user";
 const DEMO_EMAIL = "demo@looksy.app";
 const EMBEDDING_DIMENSIONS = 1536;
 
+/** SVG placeholder photo as a data URL — keeps demo wardrobe fully local. */
+function placeholderPhoto(hex: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="600" height="600" fill="${hex}"/><rect x="90" y="90" width="420" height="420" rx="40" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="6"/></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
 function makeVector(seed: number): number[] {
   let state = seed >>> 0;
   const vector: number[] = [];
@@ -236,9 +242,9 @@ async function seedCloset(userId: string) {
     await db.insert(itemPhotos).values({
       id: uuidv7(),
       itemId,
-      url: `https://storage.looksy.app/demo/${itemId}.jpg`,
-      thumbnailUrl: `https://storage.looksy.app/demo/${itemId}-thumb.jpg`,
-      storagePath: `demo/${itemId}.jpg`,
+      url: `local://items/${itemId}`,
+      thumbnailUrl: null,
+      storagePath: placeholderPhoto(seed.colors[0]!.hex),
       isPrimary: true,
       sortOrder: 0,
     });
@@ -294,16 +300,16 @@ interface MemorySeedDef {
     text: string;
     sourceType: EvidenceSourceType;
     data?: Record<string, unknown>;
+    /** Signal age in days — drives the freshness decay bands (≤30d→1.0 … >365d→0.3). */
+    daysAgo: number;
+    /** Contradicts the memory: stored via data.contradiction (schema CHECK keeps confidence in [0,1]). */
+    contradiction?: boolean;
   }>;
 }
 
 async function seedOutfits(userId: string, items: Awaited<ReturnType<typeof seedCloset>>) {
   const [whiteShirt, blackJeans, beigeBlazer, sneakers, charcoalCoat, navyOxford, oliveChinos, creamSweater, loafers, belt, midiDress] =
     items;
-    /** Signal age in days — drives the freshness decay bands (≤30d→1.0 … >365d→0.3). */
-    daysAgo: number;
-    /** Contradicts the memory: stored via data.contradiction (schema CHECK keeps confidence in [0,1]). */
-    contradiction?: boolean;
 
   const outfitDefs: OutfitSeedDef[] = [
     {
@@ -559,6 +565,8 @@ export function buildMemorySeedRows(
       description: "Structured pieces appear in 73% of your saved outfits",
       source: "behavioral",
       lastSignalAt: now,
+      // Strong recent preference — max achievable weight, all fresh:
+      // confidence 0.6 / possible, will decay as evidence ages past 30 days.
       evidence: [
         { type: "saved_preference", text: "Structured pieces in 9 of 12 saved outfits", sourceType: "outfit_feedback", daysAgo: 7, data: { count: 9 } },
         { type: "saved_preference", text: "Structured tailoring saved 8 times", sourceType: "outfit_feedback", daysAgo: 14, data: { count: 8 } },
@@ -567,12 +575,12 @@ export function buildMemorySeedRows(
     },
     {
       type: "negative_preference",
-      // Strong recent preference — max achievable weight, all fresh:
-      // confidence 0.6 / possible, will decay as evidence ages past 30 days.
       category: "bold_prints",
       description: "You rarely choose bold prints",
       source: "behavioral",
       lastSignalAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+      // Contested memory: three supporting signals against one fresh
+      // contradiction — consistency 0.75, confidence 0.231 / fading.
       evidence: [
         { type: "negative", text: "You've worn prints in 4 of 42 outfits", sourceType: "wear_log", daysAgo: 15, data: { count: 4 } },
         { type: "negative", text: "Skipped 3 print-heavy outfit suggestions", sourceType: "outfit_feedback", daysAgo: 30, data: { count: 3 } },
@@ -582,8 +590,6 @@ export function buildMemorySeedRows(
     },
     {
       type: "context_preference",
-      // Contested memory: three supporting signals against one fresh
-      // contradiction — consistency 0.75, confidence 0.231 / fading.
       category: "monday_work",
       description: "On Mondays you tend to choose structured, neutral outfits",
       source: "behavioral",
@@ -651,6 +657,7 @@ async function seedMemories(userId: string) {
         type: ev.type,
         text: ev.text,
         sourceType: ev.sourceType,
+        sourceId: ev.sourceId,
         data: ev.data,
         confidence: ev.confidence,
         createdAt: ev.createdAt,
@@ -658,7 +665,6 @@ async function seedMemories(userId: string) {
     }
   }
 }
-        sourceId: ev.sourceId,
 
 async function seedStyleProfile(userId: string) {
   await db.insert(userStyleProfiles).values({

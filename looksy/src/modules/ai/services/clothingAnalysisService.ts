@@ -66,15 +66,16 @@ export class ClothingAnalysisService {
       });
 
       // 5. generate embedding from enriched metadata
+      const embedding = await this.provider.embed({
+        text: buildItemTextRepresentation(updatedItem ?? item),
+      });
       await this.embeddingsRepository.upsertItemEmbedding({
         itemId,
         userId,
-        embedding: await this.provider.embed({
-          text: buildItemTextRepresentation(updatedItem ?? item),
-        }).then((r) => r.vector),
+        embedding: embedding.vector,
         textRepr: buildItemTextRepresentation(updatedItem ?? item),
-        model: this.provider.embeddingModel,
-        dimension: 1536,
+        model: embedding.model,
+        dimension: embedding.dimensions,
       });
 
       logger.info("clothing_analysis_completed", { itemId, category: analysis.category });

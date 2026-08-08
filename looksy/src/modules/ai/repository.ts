@@ -38,15 +38,16 @@ export class EmbeddingsRepository {
     embedding: number[],
     limit: number
   ): Promise<SimilarItem[]> {
+    const vectorLiteral = `[${embedding.join(",")}]`;
     const rows = await this.db
       .select({
         item: clothingItems,
-        distance: sql<number>`${itemEmbeddings.embedding} <=> ${embedding}`,
+        distance: sql<number>`${itemEmbeddings.embedding} <=> ${vectorLiteral}::vector`,
       })
       .from(itemEmbeddings)
       .innerJoin(clothingItems, eq(clothingItems.id, itemEmbeddings.itemId))
       .where(eq(itemEmbeddings.userId, userId))
-      .orderBy(sql`${itemEmbeddings.embedding} <=> ${embedding}`)
+      .orderBy(sql`${itemEmbeddings.embedding} <=> ${vectorLiteral}::vector`)
       .limit(limit);
 
     return rows.map(({ item, distance }) => ({ item, distance }));
