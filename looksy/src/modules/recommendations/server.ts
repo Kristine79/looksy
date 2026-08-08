@@ -185,7 +185,7 @@ export async function getTodayLook(
     logger.warn("recommendation_fallback", {
       code,
       retryable,
-      model: getAIProviderConfig().generationModel,
+      model: getAIProviderConfig().recommendationModel,
       error: error instanceof Error ? error.message : "unknown error",
       timestamp: new Date().toISOString(),
     });

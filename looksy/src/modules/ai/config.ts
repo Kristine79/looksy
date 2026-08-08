@@ -26,9 +26,12 @@ export interface JinaEmbeddingConfig {
  * Any OpenAI-compatible endpoint can be used:
  * - AI_API_KEY / OPENAI_API_KEY  — API key
  * - AI_BASE_URL                  — base URL override (custom OpenAI-compatible endpoint)
- * - AI_MODEL                     — generation model used for recommendations
+ * - AI_MODEL                     — general chat/generation model (may be a reasoning model)
+ * - AI_RECOMMENDATION_MODEL      — model for final Today's Look outfit generation
+ *                                  (non-reasoning, predictable latency / structured JSON).
+ *                                  Falls back to AI_MODEL when not set.
  * - AI_VISION_MODEL              — vision model used for clothing analysis
- * - AI_EMBEDDING_MODEL           — embeddings model
+ * - AI_EMBEDDING_MODEL           — embeddings model (legacy path; Jina is primary)
  *
  * Business logic never reads env directly; it depends on the AIProvider
  * contract, which is configured from this config at construction time.
@@ -37,6 +40,8 @@ export interface AIProviderConfig {
   apiKey: string | undefined;
   baseURL: string | undefined;
   generationModel: string;
+  /** Model used for the final outfit recommendation (Today's Look) generation. */
+  recommendationModel: string;
   visionModel: string;
   embeddingModel: string;
   /** Optional Jina embedding provider — used for embeddings when configured. */
@@ -50,10 +55,12 @@ export function getAIProviderConfig(
   env: Record<string, string | undefined> = process.env
 ): AIProviderConfig {
   const jinaApiKey = env.JINA_API_KEY ?? env.JINA_AI_KEY;
+  const generationModel = env.AI_MODEL ?? GENERATION_MODEL;
   return {
     apiKey: env.AI_API_KEY ?? env.OPENAI_API_KEY,
     baseURL: env.AI_BASE_URL || undefined,
-    generationModel: env.AI_MODEL ?? GENERATION_MODEL,
+    generationModel,
+    recommendationModel: env.AI_RECOMMENDATION_MODEL ?? generationModel,
     visionModel: env.AI_VISION_MODEL ?? VISION_MODEL,
     embeddingModel: env.AI_EMBEDDING_MODEL ?? EMBEDDING_MODEL,
     jinaEmbedding: jinaApiKey

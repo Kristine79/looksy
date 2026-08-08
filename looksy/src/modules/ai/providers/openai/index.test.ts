@@ -172,6 +172,8 @@ describe("getAIProviderConfig", () => {
     expect(config.apiKey).toBeUndefined();
     expect(config.baseURL).toBeUndefined();
     expect(config.generationModel).toBe("gpt-4o");
+    // recommendation model falls back to the general generation model
+    expect(config.recommendationModel).toBe("gpt-4o");
     expect(config.visionModel).toBe("gpt-4o-mini");
     expect(config.embeddingModel).toBe("text-embedding-3-small");
   });
@@ -181,14 +183,22 @@ describe("getAIProviderConfig", () => {
       AI_API_KEY: "key-1",
       AI_BASE_URL: "https://custom.example/v1",
       AI_MODEL: "my-model-1",
+      AI_RECOMMENDATION_MODEL: "my-rec-model",
       AI_VISION_MODEL: "my-vision-1",
       AI_EMBEDDING_MODEL: "my-embedding-1",
     });
     expect(config.apiKey).toBe("key-1");
     expect(config.baseURL).toBe("https://custom.example/v1");
     expect(config.generationModel).toBe("my-model-1");
+    expect(config.recommendationModel).toBe("my-rec-model");
     expect(config.visionModel).toBe("my-vision-1");
     expect(config.embeddingModel).toBe("my-embedding-1");
+  });
+
+  it("falls back to AI_MODEL for the recommendation model when unset", () => {
+    const config = getAIProviderConfig({ AI_MODEL: "deepseek-v4-flash" });
+    expect(config.generationModel).toBe("deepseek-v4-flash");
+    expect(config.recommendationModel).toBe("deepseek-v4-flash");
   });
 
   it("prefers AI_API_KEY over the legacy OPENAI_API_KEY", () => {
@@ -202,12 +212,35 @@ describe("getAIProviderConfig", () => {
   it("configures the provider instance models from env", () => {
     const provider = new OpenAIProvider(null, getAIProviderConfig({
       AI_MODEL: "custom-gen",
+      AI_RECOMMENDATION_MODEL: "custom-rec",
       AI_VISION_MODEL: "custom-vision",
       AI_EMBEDDING_MODEL: "custom-embed",
     }));
     expect(provider.model).toBe("custom-gen");
+    expect(provider.recommendationModel).toBe("custom-rec");
     expect(provider.visionModel).toBe("custom-vision");
     expect(provider.embeddingModel).toBe("custom-embed");
+  });
+
+  it("generateRecommendation uses the recommendation model, not the general one", async () => {
+    const client = createMockClient();
+    client.chat.completions.create = vi.fn(async () => ({
+      choices: [{ message: { content: VALID_JSON } }],
+    }));
+    const provider = new OpenAIProvider(client as never, getAIProviderConfig({
+      AI_MODEL: "deepseek-v4-flash",
+      AI_RECOMMENDATION_MODEL: "gpt-5.6-luna",
+    }));
+
+    const result = await provider.generateRecommendation({
+      systemPrompt: "system",
+      userPrompt: "user",
+    });
+
+    expect(result.model).toBe("gpt-5.6-luna");
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-5.6-luna" })
+    );
   });
 
   it("uses Jina embeddings when configured — no deterministic fallback on success", async () => {

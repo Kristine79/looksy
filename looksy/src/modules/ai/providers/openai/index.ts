@@ -20,6 +20,8 @@ import type {
 
 export class OpenAIProvider implements AIProvider {
   readonly model: string;
+  /** Model used for the final outfit recommendation (Today's Look) generation. */
+  readonly recommendationModel: string;
   readonly embeddingModel: string;
   readonly visionModel: string;
   private readonly jinaEmbedding: JinaEmbeddingConfig | null;
@@ -29,6 +31,7 @@ export class OpenAIProvider implements AIProvider {
     config: ReturnType<typeof getAIProviderConfig> = getAIProviderConfig()
   ) {
     this.model = config.generationModel;
+    this.recommendationModel = config.recommendationModel;
     this.embeddingModel = config.embeddingModel;
     this.visionModel = config.visionModel;
     this.jinaEmbedding = config.jinaEmbedding;
@@ -55,15 +58,18 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async generateRecommendation(request: GenerateRecommendationRequest): Promise<GeneratedText> {
-    return this.generateText(request);
+    return this.generateText(request, this.recommendationModel);
   }
 
   async generateExplanation(request: GenerateExplanationRequest): Promise<GeneratedText> {
-    return this.generateText(request);
+    return this.generateText(request, this.recommendationModel);
   }
 
-  private async generateText(request: GenerateRecommendationRequest): Promise<GeneratedText> {
-    const model = request.model ?? this.model;
+  private async generateText(
+    request: GenerateRecommendationRequest,
+    defaultModel: string
+  ): Promise<GeneratedText> {
+    const model = request.model ?? defaultModel;
     const content = await completeChat(this.getClient(), {
       systemPrompt: request.systemPrompt,
       userPrompt: request.userPrompt,
