@@ -11,6 +11,11 @@ import {
   outfitFeedback,
 } from "@/modules/outfits/schema";
 import { fashionMemories, memoryEvidence, userStyleProfiles } from "@/modules/recommendations/schema";
+import type { EvidenceSourceType, EvidenceType } from "@/modules/recommendations/schema";
+import { MemoryAutomationService, SIGNAL_WEIGHTS } from "@/modules/recommendations/automationService";
+import { MemoriesRepository } from "@/modules/recommendations/repository";
+import { computeStatusFromConfidence } from "@/modules/recommendations/service";
+import type { MemoryEvidenceRow } from "@/modules/recommendations/types";
 import { uuidv7 } from "@/lib/db/uuidv7";
 
 const DEMO_CLERK_ID = "demo_user";
@@ -280,17 +285,14 @@ interface MemorySeedDef {
   type: string;
   category: string;
   description: string;
-  confidence: number;
-  status: string;
-  dataPoints: number;
-  consistency: number;
   source: string;
   lastSignalAt: Date;
-  lastConfirmed?: Date;
+  /** User-confirmed (pinned) memory: confidence boosted to 0.8 like FashionMemoryService.confirmMemory. */
+  userConfirmed?: boolean;
   evidence: Array<{
-    type: string;
+    type: EvidenceType;
     text: string;
-    sourceType: string;
+    sourceType: EvidenceSourceType;
     data?: Record<string, unknown>;
   }>;
 }
@@ -298,6 +300,10 @@ interface MemorySeedDef {
 async function seedOutfits(userId: string, items: Awaited<ReturnType<typeof seedCloset>>) {
   const [whiteShirt, blackJeans, beigeBlazer, sneakers, charcoalCoat, navyOxford, oliveChinos, creamSweater, loafers, belt, midiDress] =
     items;
+    /** Signal age in days — drives the freshness decay bands (≤30d→1.0 … >365d→0.3). */
+    daysAgo: number;
+    /** Contradicts the memory: stored via data.contradiction (schema CHECK keeps confidence in [0,1]). */
+    contradiction?: boolean;
 
   const outfitDefs: OutfitSeedDef[] = [
     {
@@ -502,102 +508,157 @@ async function seedFeedback(userId: string, outfitsArr: Awaited<ReturnType<typeo
   ]);
 }
 
-async function seedMemories(userId: string) {
-  const now = new Date();
+export interface MemorySeedRow {
+  memory: {
+    type: string;
+    category: string;
+    description: string;
+    confidence: number;
+    status: string;
+    dataPoints: number;
+    consistency: number;
+    source: string;
+    lastSignalAt: Date;
+    userConfirmedAt: Date | null;
+    lastConfirmed: Date | null;
+  };
+  evidence: MemoryEvidenceRow[];
+}
+
+/**
+ * Builds the demo fashion memories purely (no DB). Confidence, dataPoints and
+ * consistency are computed by the SAME aggregation the production automation
+ * uses (MemoryAutomationService.aggregateEvidence), so the seeded state matches
+ * what applyDecay would derive — a first feedback action must not silently
+ * rewrite seeded values. Exported for tests that lock the demo data to the model.
+ */
+export function buildMemorySeedRows(
+  automation: MemoryAutomationService,
+  now: Date,
+): MemorySeedRow[] {
   const memoryDefs: MemorySeedDef[] = [
     {
       type: "color_preference",
       category: "earth_tones",
       description: "You tend to choose earth tones",
-      confidence: 0.82,
-      status: "confirmed",
-      dataPoints: 23,
-      consistency: 0.9,
       source: "behavioral",
       lastSignalAt: now,
-      lastConfirmed: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+      // Long-standing preference the user explicitly confirmed — pinned by
+      // applyDecay while activity stays within 365 days (demo of pinning).
+      userConfirmed: true,
       evidence: [
-        { type: "worn_frequency", text: "23 outfits selected with earth-tone items", sourceType: "wear_log", data: { count: 23 } },
-        { type: "saved_preference", text: "7 saved combinations feature earth tones", sourceType: "outfit_feedback", data: { count: 7 } },
-        { type: "worn_frequency", text: "12 worn items in the last 30 days", sourceType: "wear_log", data: { count: 12 } },
+        { type: "worn_frequency", text: "12 worn items in the last 30 days", sourceType: "wear_log", daysAgo: 8, data: { count: 12 } },
+        { type: "saved_preference", text: "7 saved combinations feature earth tones", sourceType: "outfit_feedback", daysAgo: 35, data: { count: 7 } },
+        { type: "worn_frequency", text: "23 outfits selected with earth-tone items", sourceType: "wear_log", daysAgo: 120, data: { count: 23 } },
+        { type: "saved_preference", text: "6 saved earth-tone outfits this year", sourceType: "outfit_feedback", daysAgo: 220, data: { count: 6 } },
       ],
     },
     {
       type: "style_tendency",
       category: "structured_fit",
       description: "Structured pieces appear in 73% of your saved outfits",
-      confidence: 0.75,
-      status: "confirmed",
-      dataPoints: 28,
-      consistency: 0.8,
       source: "behavioral",
       lastSignalAt: now,
       evidence: [
-        { type: "saved_preference", text: "Structured pieces in 73% of saved outfits", sourceType: "outfit_feedback", data: { count: 28 } },
+        { type: "saved_preference", text: "Structured pieces in 9 of 12 saved outfits", sourceType: "outfit_feedback", daysAgo: 7, data: { count: 9 } },
+        { type: "saved_preference", text: "Structured tailoring saved 8 times", sourceType: "outfit_feedback", daysAgo: 14, data: { count: 8 } },
+        { type: "saved_preference", text: "3 more structured saves this month", sourceType: "outfit_feedback", daysAgo: 25, data: { count: 3 } },
       ],
     },
     {
       type: "negative_preference",
+      // Strong recent preference — max achievable weight, all fresh:
+      // confidence 0.6 / possible, will decay as evidence ages past 30 days.
       category: "bold_prints",
       description: "You rarely choose bold prints",
-      confidence: 0.68,
-      status: "possible",
-      dataPoints: 42,
-      consistency: 0.75,
       source: "behavioral",
       lastSignalAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
       evidence: [
-        { type: "negative", text: "You've worn prints in 4 of 42 outfits", sourceType: "wear_log", data: { count: 42 } },
+        { type: "negative", text: "You've worn prints in 4 of 42 outfits", sourceType: "wear_log", daysAgo: 15, data: { count: 4 } },
+        { type: "negative", text: "Skipped 3 print-heavy outfit suggestions", sourceType: "outfit_feedback", daysAgo: 30, data: { count: 3 } },
+        { type: "worn_frequency", text: "Wore a bold print outfit last week", sourceType: "wear_log", daysAgo: 10, data: { count: 1 }, contradiction: true },
+        { type: "negative", text: "No prints picked in the last 3 months", sourceType: "wear_log", daysAgo: 80, data: { count: 0 } },
       ],
     },
     {
       type: "context_preference",
+      // Contested memory: three supporting signals against one fresh
+      // contradiction — consistency 0.75, confidence 0.231 / fading.
       category: "monday_work",
       description: "On Mondays you tend to choose structured, neutral outfits",
-      confidence: 0.6,
-      status: "emerging",
-      dataPoints: 8,
-      consistency: 0.7,
       source: "behavioral",
       lastSignalAt: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
       evidence: [
-        { type: "style_pattern", text: "8 Monday outfits, 6 featured structured pieces", sourceType: "wear_log", data: { count: 8 } },
+        { type: "style_pattern", text: "8 Monday outfits, 6 featured structured pieces", sourceType: "wear_log", daysAgo: 8, data: { count: 8 } },
+        { type: "outfit_feedback", text: "Saved 3 Monday work outfits", sourceType: "outfit_feedback", daysAgo: 20, data: { count: 3 } },
       ],
     },
   ];
 
-  for (const def of memoryDefs) {
-    const [memory] = await db
-      .insert(fashionMemories)
-      .values({
-        id: uuidv7(),
-        userId,
+  return memoryDefs.map((def) => {
+    const evidenceRows = def.evidence.map(
+      (ev) =>
+        ({
+          id: uuidv7(),
+          memoryId: "",
+          type: ev.type,
+          text: ev.text,
+          sourceType: ev.sourceType,
+          sourceId: null,
+          data: { ...ev.data, ...(ev.contradiction ? { contradiction: true } : {}) },
+          confidence: (SIGNAL_WEIGHTS as Partial<Record<EvidenceType, number>>)[ev.type] ?? 0.5,
+          createdAt: new Date(now.getTime() - ev.daysAgo * 24 * 60 * 60 * 1000),
+        }) as MemoryEvidenceRow,
+    );
+
+    const { confidence, dataPoints, consistency } = automation.aggregateEvidence(
+      evidenceRows,
+      now.getTime(),
+    );
+
+    const userConfirmed = def.userConfirmed === true;
+    return {
+      memory: {
         type: def.type,
         category: def.category,
         description: def.description,
-        confidence: def.confidence,
-        status: def.status,
-        dataPoints: def.dataPoints,
-        consistency: def.consistency,
+        confidence: userConfirmed ? 0.8 : confidence,
+        status: userConfirmed ? "confirmed" : computeStatusFromConfidence(confidence),
+        dataPoints,
+        consistency,
         source: def.source,
         lastSignalAt: def.lastSignalAt,
-        lastConfirmed: def.lastConfirmed,
-      })
+        userConfirmedAt: userConfirmed ? now : null,
+        lastConfirmed: userConfirmed ? now : null,
+      },
+      evidence: evidenceRows,
+    };
+  });
+}
+
+async function seedMemories(userId: string) {
+  const automation = new MemoryAutomationService(new MemoriesRepository(db));
+  for (const { memory, evidence } of buildMemorySeedRows(automation, new Date())) {
+    const [inserted] = await db
+      .insert(fashionMemories)
+      .values({ id: uuidv7(), userId, ...memory })
       .returning();
 
-    for (const ev of def.evidence) {
+    for (const ev of evidence) {
       await db.insert(memoryEvidence).values({
-        id: uuidv7(),
-        memoryId: memory!.id,
+        id: ev.id,
+        memoryId: inserted!.id,
         type: ev.type,
         text: ev.text,
         sourceType: ev.sourceType,
         data: ev.data,
-        confidence: 0.9,
+        confidence: ev.confidence,
+        createdAt: ev.createdAt,
       });
     }
   }
 }
+        sourceId: ev.sourceId,
 
 async function seedStyleProfile(userId: string) {
   await db.insert(userStyleProfiles).values({
@@ -648,7 +709,11 @@ async function main() {
   console.log("Seed completed successfully.");
 }
 
-main().catch((error) => {
-  console.error("Seed failed:", error);
-  process.exit(1);
-});
+// Run as a CLI script only (tsx src/lib/db/seed.ts). Importing this module —
+// e.g. from tests that lock demo data to the model — must not trigger a seed.
+if (process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("src/lib/db/seed.ts")) {
+  main().catch((error) => {
+    console.error("Seed failed:", error);
+    process.exit(1);
+  });
+}
