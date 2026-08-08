@@ -4,6 +4,7 @@ import { createEmbedding } from "./embeddings";
 import { analyzeClothingImage } from "./vision";
 import { completeChat } from "./chat";
 import { getAIProviderConfig } from "@/modules/ai/config";
+import type { JinaEmbeddingConfig } from "@/modules/ai/config";
 import type {
   AIProvider,
   ClothingAnalysisRequest,
@@ -21,6 +22,7 @@ export class OpenAIProvider implements AIProvider {
   readonly model: string;
   readonly embeddingModel: string;
   readonly visionModel: string;
+  private readonly jinaEmbedding: JinaEmbeddingConfig | null;
 
   constructor(
     private readonly client: OpenAI | null = null,
@@ -29,6 +31,7 @@ export class OpenAIProvider implements AIProvider {
     this.model = config.generationModel;
     this.embeddingModel = config.embeddingModel;
     this.visionModel = config.visionModel;
+    this.jinaEmbedding = config.jinaEmbedding;
   }
 
   private getClient(): OpenAI {
@@ -36,7 +39,10 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async embed(request: EmbedRequest): Promise<EmbeddingResult> {
-    return createEmbedding(this.getClient(), request);
+    if (this.jinaEmbedding) {
+      return createEmbedding(null, request, this.jinaEmbedding);
+    }
+    return createEmbedding(this.getClient(), request, null);
   }
 
   async analyzeClothingImage(

@@ -209,4 +209,91 @@ describe("getAIProviderConfig", () => {
     expect(provider.visionModel).toBe("custom-vision");
     expect(provider.embeddingModel).toBe("custom-embed");
   });
+
+  it("uses Jina embeddings when configured — no deterministic fallback on success", async () => {
+    const jinaVector = new Array(1536).fill(0.02);
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ model: "jina-embeddings-v4", data: [{ embedding: jinaVector }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = new OpenAIProvider(null, getAIProviderConfig({
+      JINA_API_KEY: "jina-key",
+    }));
+
+    const result = await provider.embed({ text: "navy shirt" });
+    expect(result.model).toBe("jina-embeddings-v4");
+    expect(result.dimensions).toBe(1536);
+    expect(result.vector).toEqual(jinaVector);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to the deterministic embedding when Jina fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("upstream down", { status: 503 }))
+    );
+
+    const provider = new OpenAIProvider(null, getAIProviderConfig({
+      JINA_API_KEY: "jina-key",
+    }));
+
+    const result = await provider.embed({ text: "navy shirt" });
+    expect(result.model).toBe("deterministic-fallback-v1");
+    expect(result.vector).toHaveLength(1536);
+    expect(result.vector.every((v) => Number.isFinite(v))).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the legacy embeddings path when Jina is not configured", async () => {
+    const client = createMockClient();
+    const provider = new OpenAIProvider(client as never, getAIProviderConfig({}));
+
+    const result = await provider.embed({ text: "navy shirt" });
+    expect(result.model).toBe("text-embedding-3-small");
+    expect(client.embeddings.create).toHaveBeenCalledOnce();
+  });
+});
+
+describe("getAIProviderConfig — Jina embedding provider", () => {
+  it("resolves Jina config from JINA_API_KEY", () => {
+    const config = getAIProviderConfig({ JINA_API_KEY: "key-jina" });
+    expect(config.jinaEmbedding).toEqual({
+      apiKey: "key-jina",
+      baseURL: "https://api.jina.ai/v1",
+      model: "jina-embeddings-v4",
+    });
+  });
+
+  it("accepts JINA_AI_KEY as an alias for the Jina API key", () => {
+    const config = getAIProviderConfig({ JINA_AI_KEY: "key-alias" });
+    expect(config.jinaEmbedding?.apiKey).toBe("key-alias");
+  });
+
+  it("prefers JINA_API_KEY over JINA_AI_KEY", () => {
+    const config = getAIProviderConfig({ JINA_API_KEY: "key-primary", JINA_AI_KEY: "key-alias" });
+    expect(config.jinaEmbedding?.apiKey).toBe("key-primary");
+  });
+
+  it("honours JINA_BASE_URL and JINA_EMBEDDING_MODEL overrides", () => {
+    const config = getAIProviderConfig({
+      JINA_API_KEY: "key",
+      JINA_BASE_URL: "https://custom.example/v1/",
+      JINA_EMBEDDING_MODEL: "jina-embeddings-v3",
+    });
+    expect(config.jinaEmbedding).toEqual({
+      apiKey: "key",
+      baseURL: "https://custom.example/v1/",
+      model: "jina-embeddings-v3",
+    });
+  });
+
+  it("sets jinaEmbedding to null when no Jina key is present", () => {
+    const config = getAIProviderConfig({});
+    expect(config.jinaEmbedding).toBeNull();
+  });
 });

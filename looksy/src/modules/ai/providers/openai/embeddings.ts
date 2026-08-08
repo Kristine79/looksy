@@ -1,11 +1,14 @@
 import type OpenAI from "openai";
 import {
   InvalidAIResponseError,
+  ProviderConfigurationError,
   ProviderRateLimitError,
   ProviderTimeoutError,
 } from "@/modules/ai/errors";
 import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "@/modules/ai/schema";
 import { logger } from "@/lib/logger";
+import type { JinaEmbeddingConfig } from "@/modules/ai/config";
+import { createJinaEmbedding } from "@/modules/ai/providers/jina/embeddings";
 import type { EmbedRequest, EmbeddingResult } from "@/modules/ai/types";
 
 /**
@@ -30,11 +33,52 @@ export function deterministicEmbedding(text: string): number[] {
   return vector.map((v) => v / norm);
 }
 
+/**
+ * Entry point for embeddings with a two-tier provider strategy:
+ *
+ *  1. Jina AI (when configured via JINA_API_KEY / JINA_AI_KEY) — the primary
+ *     embedding provider. Used for every embedding while it responds.
+ *  2. Deterministic fallback — emergency only. Used when Jina is unavailable,
+ *     misconfigured, or returns an invalid vector. Never used on Jina success.
+ *
+ * When Jina is not configured, the legacy OpenAI-compatible path is used
+ * (it falls back deterministically on its own).
+ */
 export async function createEmbedding(
-  client: OpenAI,
-  request: EmbedRequest
+  client: OpenAI | null,
+  request: EmbedRequest,
+  jinaConfig: JinaEmbeddingConfig | null = null
 ): Promise<EmbeddingResult> {
+  if (jinaConfig) {
+    const model = request.model ?? jinaConfig.model;
+    try {
+      const result = await createJinaEmbedding(request, jinaConfig);
+      logger.info("embedding_generated", {
+        provider: "jina",
+        model: result.model,
+        dimensions: result.dimensions,
+        fallback: false,
+      });
+      return result;
+    } catch (error) {
+      logger.warn("embedding_fallback_to_deterministic", {
+        provider: "jina",
+        model,
+        error: error instanceof Error ? error.message : "unknown error",
+      });
+      return {
+        vector: deterministicEmbedding(request.text),
+        model: DETERMINISTIC_EMBEDDING_MODEL,
+        dimensions: EMBEDDING_DIMENSIONS,
+      };
+    }
+  }
+
   const model = request.model ?? EMBEDDING_MODEL;
+
+  if (!client) {
+    throw new ProviderConfigurationError("Embedding client is missing");
+  }
 
   try {
     const response = await client.embeddings.create({
