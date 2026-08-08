@@ -14,7 +14,9 @@ const { insertItemMock, findItemsMock, updateAiMetadataMock, insertPhotoMock, up
   emitEventMock: vi.fn(),
 }));
 
-vi.mock("@/lib/db/client", () => ({ db: {} }));
+vi.mock("@/lib/db/client", () => ({
+  db: { transaction: (fn: (tx: unknown) => unknown) => fn({}) },
+}));
 
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -147,5 +149,16 @@ describe("demo service", () => {
       expect.any(String),
       expect.objectContaining({ url: expect.stringMatching(/^data:image\/svg\+xml;base64,/) })
     );
+  });
+
+  it("runs all writes inside a single db transaction", async () => {
+    findItemsMock.mockResolvedValue([]);
+    const transactionMock = vi.fn(async (fn: (tx: unknown) => unknown) => fn({}));
+    const dbModule = await import("@/lib/db/client");
+    (dbModule.db as unknown as { transaction: unknown }).transaction = transactionMock;
+
+    await loadDemoContent("user-1");
+
+    expect(transactionMock).toHaveBeenCalledTimes(1);
   });
 });
