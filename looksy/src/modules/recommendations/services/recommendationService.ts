@@ -3,6 +3,7 @@ import type { AIProvider, GeneratedText } from "@/modules/ai/types";
 import type { RetrievalService } from "@/modules/ai/services";
 import type { PromptBuilder } from "./promptBuilder";
 import { parseRecommendationResponse } from "./validation";
+import type { ClothingItemRow } from "@/modules/closet/types";
 import type {
   OutfitRecommendation,
   RecommendationContext,
@@ -34,12 +35,18 @@ export class RecommendationService {
       similarItemsLimit: request.candidatesLimit ?? 12,
     });
 
-    // Retrieval-first: candidates come from semantic similarity when available,
-    // otherwise fall back to the full wardrobe.
-    const candidates =
-      retrieval.similarItems.length > 0
-        ? retrieval.similarItems.map((s) => s.item)
-        : retrieval.context.wardrobe;
+    const limit = request.candidatesLimit ?? 12;
+    // Retrieval-first: semantic candidates (Jina) ranked by distance come first.
+    // Then top up with the user's remaining active wardrobe items (deduped, up to
+    // `limit`) so that active items without an embedding — which cannot appear in
+    // the semantic results — are not silently dropped from the candidate pool.
+    // Only `active` items are considered; archived/donated are excluded here and
+    // in the semantic retrieval (see EmbeddingsRepository.findSimilarItems).
+    const candidates = this.buildCandidates(
+      retrieval.similarItems.map((s) => s.item),
+      retrieval.context.wardrobe,
+      limit,
+    );
 
     if (candidates.length === 0) {
       return this.emptyResult(request);
@@ -80,6 +87,34 @@ export class RecommendationService {
       model: raw.model,
       createdAt: new Date(),
     };
+  }
+
+  /**
+   * Merges semantic (distance-ranked) candidates with the active wardrobe,
+   * preserving semantic order, removing duplicates and capping at `limit`.
+   * Both sources are filtered to `active` items — archived/donated items can
+   * never enter the candidate pool, whether they came from the semantic
+   * retrieval (also filtered in SQL) or the wardrobe. Active wardrobe items
+   * missing from the semantic set (e.g. items with no embedding yet) are
+   * appended, so they remain eligible when there is capacity. Items are kept
+   * unique by id.
+   */
+  private buildCandidates(
+    semanticItems: ClothingItemRow[],
+    wardrobe: ClothingItemRow[],
+    limit: number,
+  ): ClothingItemRow[] {
+    const activeWardrobe = wardrobe.filter((item) => item.status === "active");
+    const seen = new Set<string>();
+    const merged: ClothingItemRow[] = [];
+    for (const item of [...semanticItems, ...activeWardrobe]) {
+      if (item.status !== "active") continue;
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      merged.push(item);
+      if (merged.length >= limit) break;
+    }
+    return merged;
   }
 
   /**

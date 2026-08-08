@@ -7,6 +7,14 @@ import type { SimilarItem } from "./types";
 
 export type DbClient = PostgresJsDatabase<typeof schema>;
 
+/**
+ * Retrieval only ever returns active wardrobe items. Archived/donated items may
+ * still carry embeddings, but they must never surface as recommendation
+ * candidates. Exported as a named rule so the filter is testable and shared
+ * between the SQL and the unit tests.
+ */
+export const activeClothingItemCondition = eq(clothingItems.status, "active");
+
 export class EmbeddingsRepository {
   constructor(private readonly db: DbClient) {}
 
@@ -73,6 +81,7 @@ export class EmbeddingsRepository {
       })
       .from(bestEmbedding)
       .innerJoin(clothingItems, eq(clothingItems.id, bestEmbedding.itemId))
+      .where(activeClothingItemCondition)
       .orderBy(bestEmbedding.distance)
       .limit(limit);
 

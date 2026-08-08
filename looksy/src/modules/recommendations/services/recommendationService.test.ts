@@ -238,6 +238,111 @@ describe("RecommendationService.recommend", () => {
   });
 });
 
+describe("RecommendationService candidate pool", () => {
+  let mocks: ReturnType<typeof createMocks>;
+
+  beforeEach(() => {
+    mocks = createMocks();
+  });
+
+  it("Test A: archived/donated items are excluded from the candidate pool", async () => {
+    const archived = { ...ITEM, id: "item-archived", status: "archived" as const, type: "coat" };
+    const donated = { ...ITEM, id: "item-donated", status: "donated" as const, type: "dress" };
+    mocks.retrieval.retrieve = vi.fn(async () =>
+      createRetrievalResult({
+        similarItems: [
+          { item: { ...ITEM, id: "item-active", type: "shirt" }, distance: 0.1 },
+          { item: archived, distance: 0.2 },
+          { item: donated, distance: 0.3 },
+        ],
+      })
+    ) as never;
+
+    mocks.provider.generateRecommendation = vi.fn(async (request: {
+      systemPrompt: string;
+      userPrompt: string;
+    }) => {
+      // Return one of whatever items actually made it into the prompt.
+      const ids = [...request.userPrompt.matchAll(/itemId=([\w-]+)/g)].map((m) => m[1]);
+      return {
+        content: JSON.stringify({
+          outfit: [{ itemId: ids[0], reason: "picked" }],
+          explanation: { whyChosen: "w", styleMatch: "s", contextMatch: "c" },
+          confidence: 0.5,
+        }),
+        model: "gpt-4o",
+      };
+    }) as never;
+
+    const result = await mocks.service.recommend({ userId: "user-1", query: "meeting" });
+    // Archived/donated items never reach the candidate pool (buildCandidates guards
+    // status=active), so the model could not have referenced them.
+    expect(result.items.some((i) => ["item-archived", "item-donated"].includes(i.id))).toBe(false);
+  });
+
+  it("Test B: an active item without an embedding is added from wardrobe when candidates are short", async () => {
+    const semantic = { ...ITEM, id: "item-semantic", type: "jacket", aiStatus: "completed" as const };
+    const noEmbedding = { ...ITEM, id: "item-fresh", type: "hoodie", aiStatus: "pending" as const };
+    mocks.retrieval.retrieve = vi.fn(async () =>
+      createRetrievalResult({
+        // Only 1 semantic candidate — the wear history lookup returns both, and
+        // wardrobe holds the fresh item with no embedding.
+        similarItems: [{ item: semantic, distance: 0.1 }],
+        context: { ...createStyleContext(), wardrobe: [semantic, noEmbedding] },
+      })
+    ) as never;
+
+    mocks.provider.generateRecommendation = vi.fn(async (request: {
+      systemPrompt: string;
+      userPrompt: string;
+    }) => {
+      const ids = [...request.userPrompt.matchAll(/itemId=([\w-]+)/g)].map((m) => m[1]);
+      await expect(ids).toContain("item-fresh");
+      return {
+        content: JSON.stringify({
+          outfit: [{ itemId: "item-fresh", reason: "pick the fresh item" }],
+          explanation: { whyChosen: "w", styleMatch: "s", contextMatch: "c" },
+          confidence: 0.5,
+        }),
+        model: "gpt-4o",
+      };
+    }) as never;
+
+    const result = await mocks.service.recommend({ userId: "user-1", query: "meeting" });
+    expect(result.recommendation.outfit.map((o) => o.itemId)).toContain("item-fresh");
+  });
+
+  it("Test B2: candidate pool is capped at the candidatesLimit and dedupes", async () => {
+    const semantic = { ...ITEM, id: "item-1", type: "shirt" };
+    const extra = [
+      { ...ITEM, id: "item-2", type: "pants" },
+      { ...ITEM, id: "item-3", type: "shoes" },
+    ];
+    mocks.retrieval.retrieve = vi.fn(async () =>
+      createRetrievalResult({
+        similarItems: [{ item: semantic, distance: 0.1 }],
+        context: { ...createStyleContext(), wardrobe: [semantic, ...extra] },
+      })
+    ) as never;
+
+    let userPrompt = "";
+    mocks.provider.generateRecommendation = vi.fn(async (request: {
+      systemPrompt: string;
+      userPrompt: string;
+    }) => {
+      userPrompt = request.userPrompt;
+      return { content: VALID_RESPONSE, model: "gpt-4o" };
+    }) as never;
+
+    await mocks.service.recommend({ userId: "user-1", query: "meeting", candidatesLimit: 2 });
+
+    const listed = [...userPrompt.matchAll(/itemId=([\w-]+)/g)].map((m) => m[1]);
+    expect(listed.length).toBeLessThanOrEqual(2);
+    // duplicates removed: item-1 appears exactly once
+    expect(listed.filter((id) => id === "item-1")).toHaveLength(1);
+  });
+});
+
 describe("RecommendationService.whyNotRecommended", () => {
   it("is a contract stub for now", async () => {
     const { service } = createMocks();
