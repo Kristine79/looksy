@@ -28,7 +28,7 @@ live in Phase 6; Fashion Memory automation landed in Phase 7; Phase 8
   every action records a signal through `FeedbackService` for Fashion Memory training.
 - **Fashion Memory UI** — "What LOOKSY has learned about you": memories with
   confidence bars and signal counts.
-- **Demo mode** — the seeded `demo_user` (via `pnpm db:seed`) shows a realistic
+- **Demo mode** — the seeded `demo_user` (via `npm run db:seed`) shows a realistic
   wardrobe, outfits, wear history and memories; a banner clearly marks demo data.
   Any account can also load a sample wardrobe from onboarding.
 - **HTTP API** — `GET/POST /api/wardrobe`, `POST /api/recommendations`.
@@ -65,7 +65,7 @@ Feature status:
 | Fashion Memory: storage layer, repositories and manual services | Done |
 | Fashion Memory automation (auto-derived memories from signals) | Done (Phase 7) |
 | AI provider abstraction (OpenAI-compatible, env-configurable: `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`...) | Done |
-| Vision pipeline (photo → item metadata) | Done — `ClothingAnalysisService` + `gpt-4o-mini` |
+| Vision pipeline (photo → item metadata) | Done — `ClothingAnalysisService` + `qwen3.7-plus` (OpenCode-compatible) |
 | Embeddings pipeline + pgvector retrieval (RAG) | Done |
 | AI Recommendation Engine: request → context → prompt → LLM → explainable recommendation | Done — see `docs/LOOKSY_RECOMMENDATION_ENGINE.md` |
 | Trust Layer (evidence-grounded explanations, owned-items-only guarantee) | Done |
@@ -100,7 +100,7 @@ Detailed flows: [docs/LOOKSY_PRODUCT_EXPERIENCE.md](../docs/LOOKSY_PRODUCT_EXPER
 
 Two ways to demo LOOKSY without creating data manually:
 
-1. **Seeded demo user (recommended for local demo)** — run `pnpm db:seed` and
+1. **Seeded demo user (recommended for local demo)** — run `npm run db:seed` and
    open the app without Clerk keys: you sign in as `demo_user` with a full
    sample wardrobe (12 items, 4 outfits, wear history, 4 fashion memories).
    A banner marks demo mode.
@@ -127,7 +127,8 @@ Full process: [Development Workflow](../docs/DEVELOPMENT_WORKFLOW.md)
 | Database | PostgreSQL 16 + pgvector | Local via Docker Compose; managed option planned for production |
 | ORM | Drizzle ORM + postgres-js | Migrations, seed, Drizzle Studio |
 | Auth | Clerk (`@clerk/nextjs`) | Session + auto-provisioning; demo-mode fallback |
-| AI | OpenAI SDK (OpenAI-compatible endpoints) | Vision, embeddings, generation — `src/modules/ai` |
+| AI | OpenAI SDK (OpenAI-compatible endpoints) | Chat/vision: `deepseek-v4-flash` / `qwen3.7-plus` via OpenCode Go — `src/modules/ai` |
+| AI embeddings | Jina AI (`jina-embeddings-v4`, 1536-dim) | Dedicated provider; deterministic fallback (ADR-031/032/033) |
 | Image storage | Supabase Storage | Local data-URL fallback for MVP |
 | Validation | Zod | Shared between actions and API routes |
 | Testing | Vitest + Testing Library | Unit + component tests |
@@ -196,11 +197,11 @@ Product and architecture documentation: [`docs/`](../docs) (MVP architecture, da
 
 ## Getting Started
 
-Prerequisites: Node.js 20+, pnpm, Docker.
+Prerequisites: Node.js 20+, npm, Docker.
 
 ```bash
 # 1. Install dependencies
-pnpm install
+npm install
 
 # 2. Start local PostgreSQL (Docker, port 5432)
 docker-compose up -d
@@ -212,13 +213,13 @@ cp .env.example .env.local
 # the app runs in demo mode using the seeded demo user.
 
 # 4. Apply migrations
-pnpm db:migrate
+npm run db:migrate
 
 # 5. (Optional) Seed demo data: demo user, wardrobe, outfits, memories
-pnpm db:seed
+npm run db:seed
 
 # 6. Run the dev server
-pnpm dev
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) and go to
@@ -233,17 +234,17 @@ Open [http://localhost:3000](http://localhost:3000) and go to
 
 | Command | Description |
 |---------|-------------|
-| `pnpm db:generate` | Generate a migration from the schema |
-| `pnpm db:migrate` | Apply pending migrations |
-| `pnpm db:push` | Push schema directly (dev only) |
-| `pnpm db:studio` | Open Drizzle Studio |
-| `pnpm db:seed` | Seed demo data (idempotent) |
+| `npm run db:generate` | Generate a migration from the schema |
+| `npm run db:migrate` | Apply pending migrations |
+| `npm run db:push` | Push schema directly (dev only) |
+| `npm run db:studio` | Open Drizzle Studio |
+| `npm run db:seed` | Seed demo data (idempotent) |
 
 ## Testing Commands
 
 ```bash
-pnpm test          # Run all tests once (Vitest)
-pnpm test:watch    # Watch mode
+npm test          # Run all tests once (Vitest)
+npm run test:watch    # Watch mode
 ```
 
 Covered so far: shared lib (errors, logger, validators), closet service, outfit feedback service, recommendations (fashion memory + today-look fallback contract), AI providers, clothing analysis (incl. sanitized errors), server actions (closet / recommendations / outfits / users / demo), API routes (`/api/wardrobe`, `/api/recommendations`), analytics tracker, demo content injection and critical components (ClothingCard, AddClothingForm, FeedbackButtons, MemoryCard, EvidenceBadge, TodayLookExperience, OnboardingBanner).
@@ -256,6 +257,7 @@ See `.env.example`. Current requirements:
 |----------|---------------|
 | `DATABASE_URL` | Yes (local Drizzle setup) |
 | `AI_API_KEY` (or `OPENAI_API_KEY`) | Yes for AI analysis & recommendations |
+| `JINA_API_KEY` (or `JINA_AI_KEY`) | For semantic embeddings; deterministic fallback works without it |
 | `NEXT_PUBLIC_APP_URL` | Yes |
 | `LOG_LEVEL` | Optional (default `info`) |
 | Clerk keys | Optional — demo mode fallback |
@@ -265,13 +267,13 @@ See `.env.example`. Current requirements:
 
 | Command | Description |
 |---------|-------------|
-| `pnpm dev` | Start development server |
-| `pnpm build` | Production build |
-| `pnpm start` | Start production server |
-| `pnpm lint` | Lint code |
-| `pnpm typecheck` | TypeScript type checking |
-| `pnpm test` | Run tests |
-| `pnpm test:watch` | Run tests in watch mode |
-| `pnpm db:*` | Database commands (see above) |
+| `npm run dev` | Start development server |
+| `npm run build` | Production build |
+| `npm run start` | Start production server |
+| `npm run lint` | Lint code |
+| `npm run typecheck` | TypeScript type checking |
+| `npm test` | Run tests |
+| `npm run test:watch` | Run tests in watch mode |
+| `npm run db:*` | Database commands (see above) |
 
 CI (`.github/workflows/ci.yml`) runs `lint`, `typecheck`, `test` and `build` on push/PR to `main`.

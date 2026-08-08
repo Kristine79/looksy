@@ -140,8 +140,8 @@
   4. **Memory architectures** enable personalization over time
   - The core thought: **Memory, not just generation.**
 - **Supporting points:**
-  - **Vision AI** — GPT-4o Vision: photo → structured clothing metadata (type, color, pattern, material, season)
-  - **Embeddings** — text-embedding-3-small (1536-dim); semantic item similarity via pgvector cosine search
+  - **Vision AI** — OpenAI-compatible vision (qwen3.7-plus): photo → structured clothing metadata (type, color, pattern, material, season)
+  - **Embeddings** — Jina AI jina-embeddings-v4 (1536-dim); semantic item similarity via pgvector cosine search
   - **Style Profile** — user style vector as weighted aggregate of their own item embeddings (wardrobe + choices); not style rules applied to everyone — a model built from one person's wardrobe and choices
   - **Fashion Memory** — preferences as hypotheses with confidence states, evidence, and natural decay; user can confirm, correct, or delete
   - **Feedback Loop** — wear/save/swap + post-wear ratings are the primary learning signal
@@ -191,7 +191,7 @@
   - PostgreSQL + pgvector — embeddings in the main database, no extra services
   - Drizzle ORM — schema-first, type-safe queries
   - Clerk — authentication out of the box
-  - OpenAI — GPT-4o Vision + text-embedding-3-small, behind an interface-based provider abstraction (providers swappable without business-logic changes)
+  - OpenAI-compatible endpoint (deepseek-v4-flash / qwen3.7-plus) + Jina AI embeddings (jina-embeddings-v4), behind an interface-based provider abstraction (providers swappable without business-logic changes)
   - Supabase Storage — photo storage and CDN
   - Vercel — zero-config deployment, preview deploys
 - **Suggested visual:** Stack table or logo grid; call out "AI behind abstraction layer" (future-proofing)

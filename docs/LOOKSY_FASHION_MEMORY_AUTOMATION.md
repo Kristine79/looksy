@@ -66,6 +66,10 @@ MemoryAutomationService.processSignals(userId)
 - **negative_preference**: ≥ 2 skip-действий с одинаковым тегом контекста
   (occasion/weather из `outfit_feedback.context`).
 
+Контекст пишется в `outfit_feedback.context` самим UI: при "Not for me"
+(`notForMeAction`) `FeedbackButtons` передаёт occasion текущего look'а —
+без него изолированный skip не создаёт воспоминание (фикс `f45dc37`).
+
 Порог задан константой `CREATION_SIGNAL_THRESHOLD = 2`. Один изолированный
 эпизод никогда не превращается в предпочтение.
 

@@ -84,16 +84,32 @@ verified evidence below"*.
 
 ## AI Provider Configuration
 
-Провайдер настраивается через environment variables (никаких ключей в коде):
+Провайдеры настраиваются через environment variables (никаких ключей в коде):
+
+**Chat / vision** (OpenAI-compatible endpoint, OpenCode Go):
 
 | Переменная | Назначение | Default |
 |---|---|---|
 | `AI_API_KEY` | API key (приоритет) | — |
-| `OPENAI_API_KEY` | fallback-ключ | — |
-| `AI_BASE_URL` | кастомный OpenAI-compatible endpoint | официальный OpenAI |
-| `AI_MODEL` | модель генерации рекомендаций | `gpt-4o` |
-| `AI_VISION_MODEL` | модель vision-анализа вещей | `gpt-4o-mini` |
-| `AI_EMBEDDING_MODEL` | модель эмбеддингов | `text-embedding-3-small` |
+| `OPENAI_API_KEY` | fallback-ключ (legacy) | — |
+| `AI_BASE_URL` | кастомный OpenAI-compatible endpoint | `https://opencode.ai/zen/go/v1` |
+| `AI_MODEL` | модель генерации рекомендаций | `deepseek-v4-flash` |
+| `AI_VISION_MODEL` | модель vision-анализа вещей | `qwen3.7-plus` |
+
+**Embeddings** (Jina AI, ADR-031):
+
+| Переменная | Назначение | Default |
+|---|---|---|
+| `JINA_API_KEY` | API key (приоритет) | — |
+| `JINA_AI_KEY` | alias ключа | — |
+| `JINA_BASE_URL` | endpoint Jina | `https://api.jina.ai/v1` |
+| `JINA_EMBEDDING_MODEL` | модель эмбеддингов | `jina-embeddings-v4` |
+
+`AI_EMBEDDING_MODEL` (legacy `text-embedding-3-small`) используется только когда
+Jina не сконфигурирован; при сбое любого провайдера эмбеддингов применяется
+детерминированный фолбэк (`deterministic-fallback-v1`). Клиент LLM работает
+fail-fast: таймаут 30s, без SDK-ретраев (ADR-035) — решения о retry принимает
+оркестрационный слой.
 
 Конфигурация читается в `src/modules/ai/config.ts` (`getAIProviderConfig()`)
 и инжектируется в `OpenAIProvider` при конструировании. Бизнес-логика
@@ -123,13 +139,13 @@ interface AIProvider {
   analyzeClothingImage(request: ClothingAnalysisRequest): Promise<ClothingAnalysisWithConfidence>;
   generateRecommendation(request: GenerateRecommendationRequest): Promise<GeneratedText>;
   generateExplanation(request: GenerateExplanationRequest): Promise<GeneratedText>;
-  generateOutfits(request: GenerateOutfitsRequest): Promise<GeneratedOutfit[]>; // stub (Phase 6)
+  generateOutfits(request: GenerateOutfitsRequest): Promise<GeneratedOutfit[]>; // реализован (Phase 6)
 }
 ```
 
 - `generateRecommendation` — возвращает **сырой текст** (JSON). Валидация — в сервисе.
 - `generateExplanation` — объяснение уже выбранного набора вещей (PromptBuilder.buildExplanationPrompt).
-- `generateOutfits` — старый контракт, не реализован (Phase 6).
+- `generateOutfits` — полный пайплайн генерации образа с feedback-циклом (Phase 6, см. LOOKSY_AI_LAYER §9).
 
 ## Response Schema
 
@@ -145,25 +161,21 @@ interface AIProvider {
 }
 ```
 
-## Negative Reasoning (contract/stub)
+## Negative Reasoning (implemented)
 
 `RecommendationService.whyNotRecommended({ userId, itemId, query, ... })` —
-контракт для будущей логики "почему не выбрана другая вещь" (swap reasoning,
-rotation, context mismatch). Реализация — Phase 6.
+объяснение "почему не выбрана другая вещь" (swap reasoning, rotation,
+context mismatch). Реализовано в Phase 6 и используется при swap-фидбеке.
 
 ## Роль в MVP
 
 Готово для MVP:
 
 - end-to-end пайплайн запрос → объяснимая рекомендация;
-- RAG-ретрив кандидатов по семантической близости;
+- RAG-ретрив кандидатов по семантической близости (Jina embeddings, 1536 dims);
 - Trust Layer: evidence-факты + объяснения по 3 осям;
-- провайдер-независимая архитектура (OpenAI / OpenCode Go / любой compatible);
-- защита от чужих вещей и невалидных ответов.
-
-Следующие шаги:
-
-- API-слой (routes) поверх `RecommendationService`;
-- кэширование/очередь для дорогих вызовов;
-- `whyNotRecommended` — item-level объяснения;
-- сохранение результата как outfit (Phase 6) через `OutfitsService`.
+- провайдер-независимая архитектура (OpenAI-compatible / Jina / локальный фолбэк);
+- защита от чужих вещей и невалидных ответов;
+- API-слой поверх `RecommendationService` (routes, server actions);
+- сохранение результата как outfit через `OutfitsService` + feedback-цикл;
+- фаза 6 завершена: генерация образов, fallback-режим без AI, fashion memory automation.

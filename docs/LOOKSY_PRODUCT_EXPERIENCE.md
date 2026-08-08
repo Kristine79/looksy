@@ -128,7 +128,7 @@ API contract — `POST /api/recommendations`:
 // response — TodayLookResult
 { "outfitId": "...", "name": "Work", "occasion": "work", "status": "generated",
   "recommendation": { "outfit": [...], "explanation": {...}, "confidence": 0.87 },
-  "items": [...], "evidence": [...], "scores": {...}, "model": "gpt-4o", "createdAt": "..." }
+  "items": [...], "evidence": [...], "scores": {...}, "model": "deepseek-v4-flash", "createdAt": "..." }
 ```
 
 Validation: zod schemas shared between actions and API routes

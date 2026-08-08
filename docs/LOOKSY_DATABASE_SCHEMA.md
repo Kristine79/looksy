@@ -1,6 +1,6 @@
 # LOOKSY — Database Schema
 
-> Version: 2.0 | Status: Active | Last updated: 2026-08-07
+> Version: 2.0 | Status: Active | Last updated: 2026-08-08
 > Role: Data Engineer | Database Design & Management
 > Stack: Neon PostgreSQL 17 + pgvector 0.8.0 + Drizzle ORM 0.38
 
@@ -209,10 +209,14 @@ src/modules/analytics/schema.ts
 
 | Field | Value |
 |-------|-------|
-| Model | `text-embedding-3-small` (`EMBEDDING_MODEL` in `src/modules/ai/schema.ts`) |
-| Dimensions | 1536 (`EMBEDDING_DIMENSIONS`) |
+| Model (primary) | `jina-embeddings-v4` (`JINA_EMBEDDING_MODEL`, called with explicit `dimensions: 1536`) |
+| Model (legacy path) | `text-embedding-3-small` (`AI_EMBEDDING_MODEL`) — used only when Jina is not configured |
+| Model (emergency) | `deterministic-fallback-v1` — local fallback, never used when a provider succeeds |
+| Dimensions | 1536 (`EMBEDDING_DIMENSIONS`), unchanged by the Jina switch — **no migration required** |
 | Metric | cosine distance `<=>` (`vector_cosine_ops`) |
 | Index | HNSW (ADR-012) — `idx_item_embeddings_vec`, `idx_item_embeddings_user` |
+
+Row `model` default is `text-embedding-3-small`; rows written by Jina store `jina-embeddings-v4`, fallback rows store `deterministic-fallback-v1`. Cosine search is model-agnostic: mixed rows remain comparable, and per-model uniqueness is preserved by `uq_item_embeddings_item_model (item_id, model)`.
 
 ### 4.2 Query Pattern
 

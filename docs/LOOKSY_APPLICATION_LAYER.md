@@ -1,6 +1,6 @@
 # LOOKSY — Application Layer
 
-> Version: 1.0 | Status: Active | Last updated: 2026-08-07
+> Version: 1.0 | Status: Active | Last updated: 2026-08-08
 > Role: Senior Backend Engineer | Phase 3
 
 ---
@@ -188,7 +188,7 @@ const ctx = await contextService.buildUserStyleContext(userId);
 
 ---
 
-## 5. Future AI Pipeline Integration
+## 5. AI Pipeline Integration
 
 ```
 User request (occasion, weather, mood)
@@ -197,14 +197,19 @@ RecommendationContextService.buildUserStyleContext(userId)
         ↓                     — wardrobe / outfits / wear / feedback / memories / style profile
 OutfitService.generateOutfitContext(userId, request)
         ↓                     — candidates + history (retrieval)
-AIProvider.generateOutfits(request)     ← Phase 4 (OpenAI or local)
+RetrievalService.retrieve()  — RAG: query embedding (Jina) → HNSW similar items
         ↓
-OutfitService.createOutfit(userId, result) + FeedbackService.recordSave/recordSwap
+AIProvider.generateOutfits(request)     ← OpenAI-compatible (deepseek-v4-flash via OpenCode Go)
+        ↓
+OutfitService.createOutfit(userId, result) + FeedbackService.recordSave/recordSwap/recordSkip
         ↓
 MemoryAutomationService.processSignals(userId)  ← Phase 7, ADR-014: behavioral signals → fashion memories
 ```
 
-Current boundaries: everything up to `AIProvider` exists. `AIProvider` is a typed contract (`src/modules/ai/types.ts`).
+Current boundaries: the full pipeline is implemented end-to-end (Phases 4–7).
+`AIProvider` is the typed contract (`src/modules/ai/types.ts`); chat/vision use
+the OpenAI-compatible endpoint, embeddings use the Jina provider (ADR-031),
+with a deterministic fallback for zero-config operation.
 
 ---
 
@@ -214,11 +219,13 @@ Unit tests use repository mocks (constructor injection) — no DB needed.
 
 | File | Coverage |
 |------|----------|
-| `src/modules/closet/service.test.ts` | add/get/update/remove, ownership errors (6 tests) |
-| `src/modules/outfits/feedbackService.test.ts` | wear/save/swap/skip + ownership (7 tests) |
-| `src/modules/recommendations/service.test.ts` | memory CRUD, confidence, confirm/reject, status mapping (9 tests) |
+| `src/modules/closet/service.test.ts` | add/get/update/remove, ownership errors |
+| `src/modules/outfits/feedbackService.test.ts` | wear/save/swap/skip + ownership, skip context |
+| `src/modules/recommendations/service.test.ts` | memory CRUD, confidence, confirm/reject, status mapping |
+| `src/modules/recommendations/automationService.test.ts` | fashion memory automation (18 tests) |
+| `src/modules/ai/providers/jina/embeddings.test.ts` | Jina provider contract (9 tests) |
 
-Run: `npm test` (38 tests total).
+Run: `npm test` → **190 tests** total (31 files).
 
 ---
 
@@ -228,9 +235,9 @@ Run: `npm test` (38 tests total).
 npm run lint        → 0 errors, 0 warnings
 npm run typecheck   → OK
 npm run build       → OK (Next.js 16)
-npm test            → 38 passed
+npm test            → 190 passed
 ```
 
 ---
 
-*Application Layer ready for UI/API phase. AI provider contracts defined, implementations deferred.*
+*Full AI pipeline implemented end-to-end: retrieval → generation → feedback → fashion memory automation. Chat/vision via OpenAI-compatible endpoint, embeddings via Jina, deterministic fallback included.*

@@ -73,13 +73,13 @@ Requirements:
 Before finishing a phase, run the full validation:
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
-All four commands must pass. If a test requires a real database or external service, it must be excluded from the default `pnpm test` run and documented as an integration test.
+All four commands must pass. If a test requires a real database or external service, it must be excluded from the default `npm test` run and documented as an integration test.
 
 ### 3. Documentation
 

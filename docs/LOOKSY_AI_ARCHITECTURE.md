@@ -1,7 +1,13 @@
 # LOOKSY — AI Architecture
 
-> Version: 1.0 | Status: Active | Last updated: 2026-07-22
+> Version: 1.0 | Status: Active (target-state design) | Last updated: 2026-08-08
 > Role: AI/ML Technical Lead | Fashion AI System Design
+
+> **Note:** This document is the **target-state design** for the fashion AI system.
+> It describes the intended architecture (e.g. GPT-4o / text-embedding-3-small as
+> reference choices) and may differ from what is implemented today.
+> For the **actual current implementation** see
+> [`docs/LOOKSY_AI_LAYER.md`](./LOOKSY_AI_LAYER.md) and the developer README.
 
 ---
 
@@ -17,6 +23,23 @@
 8. [Cost Management](#8-cost-management)
 9. [Quality Assurance](#9-quality-assurance)
 10. [Provider Migration Strategy](#10-provider-migration-strategy)
+
+---
+
+## Current Implementation Snapshot (2026-08-08)
+
+| Touchpoint | Implemented today | Notes |
+|-----------|------------------|-------|
+| Chat / generation | `deepseek-v4-flash` via OpenAI-compatible endpoint (`AI_BASE_URL` = OpenCode Go) | Env-configurable, ADR-034 |
+| Vision (clothing analysis) | `qwen3.7-plus` via the same OpenAI-compatible endpoint | Zod-validated JSON |
+| Embeddings | `jina-embeddings-v4`, explicit `dimensions: 1536` (Jina AI) | ADR-031/032; deterministic fallback, no schema change |
+| Similarity search | pgvector HNSW cosine | Unchanged (ADR-012/023) |
+| LLM call policy | 30s timeout, no SDK retries (fail-fast, ADR-035) | Retries owned by orchestration |
+| Tests | 190 (31 files); lint/typecheck/build green | Providers mocked, no real calls |
+
+Model-specific numbers in the design sections below (costs, latency, capacity)
+are planning estimates for the target state, not live measurements.
+
 
 ---
 

@@ -1,6 +1,6 @@
 # LOOKSY — MVP Architecture
 
-> Version: 1.0 | Status: Active | Last updated: 2026-07-22
+> Version: 1.0 | Status: Active | Last updated: 2026-08-08
 > Refactored from: LOOKSY_ARCHITECTURE.md (enterprise version)
 
 ---
@@ -471,7 +471,7 @@ User uploads photo
 │   │
 │   ├── 5. AI Module → Generate embedding
 │   │   ├── Create text description from metadata
-│   │   ├── OpenAI text-embedding-3-small
+│   │   ├── Jina AI jina-embeddings-v4 (1536-dim; deterministic fallback)
 │   │   └── Save to item_embeddings (pgvector)
 │   │
 │   └── 6. Return item to client
@@ -604,7 +604,7 @@ CREATE TABLE item_embeddings (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     item_id     UUID NOT NULL REFERENCES clothing_items(id) ON DELETE CASCADE,
     user_id     UUID NOT NULL REFERENCES users(id),
-    embedding   vector(1536),            -- text-embedding-3-small dimension
+    embedding   vector(1536),            -- jina-embeddings-v4 dimension (1536)
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -719,14 +719,14 @@ interface AIStylistProvider {
 
 All providers are injected via module configuration. Swapping OpenAI for another provider requires implementing these interfaces — no changes to business logic.
 
-### 8.2 OpenAI API Usage
+### 8.2 AI API Usage
 
 | Feature | Model | Token Cost (approx) | Frequency |
 |---------|-------|---------------------|-----------|
-| Item classification | GPT-4o | ~500 tokens per image | Per upload |
-| Outfit generation | GPT-4o | ~2,000 tokens per request | Per generation |
-| Embeddings | text-embedding-3-small | ~100 tokens per item | Per upload |
-| Chat (future) | GPT-4o | ~1,000 tokens per message | Per message |
+| Item classification (vision) | OpenAI-compatible vision (`qwen3.7-plus` via OpenCode) | ~500 tokens per image | Per upload |
+| Outfit generation | OpenAI-compatible (`deepseek-v4-flash` via OpenCode) | ~2,000 tokens per request | Per generation |
+| Embeddings | Jina AI jina-embeddings-v4 (1536-dim) | ~100 tokens per item | Per upload |
+| Chat (future) | OpenAI-compatible | ~1,000 tokens per message | Per message |
 
 **Estimated cost at 5,000 users, 25 items avg:** ~$150–300/month.
 
@@ -881,11 +881,12 @@ MVP uses TanStack Query polling for updates after AI processing:
 └─────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────┐
-│                   OPENAI                             │
+│              AI PROVIDERS (env-config)               │
 │  ┌────────────────────────────────────────────────┐ │
-│  │  - GPT-4o (vision + text)                      │ │
-│  │  - text-embedding-3-small                      │ │
-│  │  - Pay-per-use pricing                         │ │
+│  │  Chat/vision: OpenAI-compatible endpoint       │ │
+│  │    (deepseek-v4-flash / qwen3.7-plus)          │ │
+│  │  Embeddings: Jina AI jina-embeddings-v4        │ │
+│  │    (deterministic fallback if unavailable)     │ │
 │  └────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────┘
 ```

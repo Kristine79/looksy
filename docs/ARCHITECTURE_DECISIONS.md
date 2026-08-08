@@ -1,6 +1,6 @@
 # LOOKSY — Architecture Decisions
 
-> Version: 1.2 | Status: Active | Last updated: 2026-08-07
+> Version: 1.3 | Status: Active | Last updated: 2026-08-08
 > Purpose: Document all architectural decisions and their rationale
 
 ---
@@ -1185,6 +1185,167 @@ Wardrobe items require photos. Supabase Storage needs project setup and credenti
 
 ---
 
+## 32. ADR-031: Separate Embedding Provider (Jina AI)
+
+**Status:** Accepted
+
+### Context
+
+Embeddings were served by the same OpenAI-compatible client as chat/vision (`text-embedding-3-small` via `AI_BASE_URL`), which is not guaranteed to offer the OpenAI embeddings endpoint. A dedicated embedding provider removes the coupling between generation, vision and vector quality.
+
+### Decision
+
+- New provider module `src/modules/ai/providers/jina/` calls `POST {JINA_BASE_URL}/embeddings` directly (no SDK), with `JINA_API_KEY` (`JINA_AI_KEY` accepted as alias) and `JINA_EMBEDDING_MODEL` (default `jina-embeddings-v4`).
+- `createEmbedding()` in `src/modules/ai/providers/openai/embeddings.ts` becomes a dispatcher: Jina first, legacy OpenAI-compatible path only when Jina is not configured.
+- Chat/vision are untouched — they stay on the OpenAI-compatible endpoint (ADR-034).
+
+### Rationale
+
+- Embedding quality and availability become independent of the chat provider.
+- Success/failure is observable: `embedding_generated {provider:"jina", ...}` vs `embedding_fallback_to_deterministic` logs.
+- With Jina configured, embeddings work even without `AI_API_KEY` (the dispatcher is called with a `null` client).
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Keep embeddings on the OpenAI-compatible endpoint | Depends on the gateway implementing `/embeddings`; single point of failure |
+| Use the Jina SDK | One more dependency; a raw `fetch` with 30s abort is sufficient and testable |
+
+### Consequences
+
+- `.env` gains `JINA_API_KEY` / `JINA_BASE_URL` / `JINA_EMBEDDING_MODEL`; `.env.example` documents them.
+- Retrieval results mix row models; cosine search is model-agnostic, per-model uniqueness kept by `uq_item_embeddings_item_model`.
+
+---
+
+## 33. ADR-032: jina-embeddings-v4 with Explicit 1536 Dimensions (No Migration)
+
+**Status:** Accepted
+
+### Context
+
+`jina-embeddings-v3` caps at 1024 dimensions — a 1536 request returns 422 — so adopting v3 would require altering `vector(1536)` columns, the HNSW index and reseeding. The schema must not change for a provider swap.
+
+### Decision
+
+- Default embedding model: `jina-embeddings-v4`, always called with explicit `dimensions: 1536`.
+- pgvector schema stays as-is: `item_embeddings.embedding vector(1536)`, `user_style_profiles.style_vec vector(1536)`, HNSW index unchanged.
+
+### Rationale
+
+- v4 returns exactly 1536-dimension vectors (verified live: 200 OK), so DB columns, indexes and existing rows remain valid.
+- No migration, no reseed, no index rebuild — the switch is configuration-only.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| `jina-embeddings-v3` | Max 1024 dims → schema migration + re-embed all rows |
+| `jina-embeddings-v5-*` | v5-text-small (1024) / v5-text-nano (768) do not support 1536 |
+
+### Consequences
+
+- Existing rows (`text-embedding-3-small`, `deterministic-fallback-v1`) remain queryable alongside Jina rows.
+- Live validation confirmed Jina rows win similarity priority (distance 0.0000).
+
+---
+
+## 34. ADR-033: Deterministic Embedding Fallback Retained as Emergency Path
+
+**Status:** Accepted
+
+### Context
+
+Phase 2 shipped a deterministic embedding fallback (`deterministic-fallback-v1`, LCG + normalize) so the product works with no AI credentials. Introducing Jina raised the question of removing it.
+
+### Decision
+
+- Keep the deterministic fallback as the last line of defense: any provider failure (Jina or legacy OpenAI-compatible) degrades to deterministic vectors, never to a hard error.
+- It is unit-tested, deterministic, and its model id is recorded per row.
+
+### Rationale
+
+- Wardrobe onboarding and retrieval must work in local/offline/demo setups and during provider outages.
+- The fallback is never used when a provider succeeds (dispatcher logs `embedding_fallback_to_deterministic` only on failure).
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Remove the fallback | Breaks zero-config local/demo operation |
+| Fall back to rule-based text search only | Vector column would still require an embedding; deterministic vector is simpler |
+
+### Consequences
+
+- Similarity quality under fallback is lower but the pipeline never blocks on the embedding provider.
+- New Jina rows outrank fallback rows in retrieval, so quality self-heals as items are re-embedded.
+
+---
+
+## 35. ADR-034: Chat/Vision Stay on OpenAI-Compatible Endpoint
+
+**Status:** Accepted
+
+### Context
+
+With Jina handling embeddings, a question arose whether chat/vision should also move off the OpenAI-compatible endpoint (OpenCode Go, `AI_BASE_URL`).
+
+### Decision
+
+- Generation (`AI_MODEL`, default `deepseek-v4-flash`) and vision (`AI_VISION_MODEL`, default `qwen3.7-plus`) remain on the OpenAI-compatible client via `AI_BASE_URL`.
+- Only the embedding path moved to Jina (ADR-031).
+
+### Rationale
+
+- The OpenAI-compatible gateway is validated in production for both chat and vision; swapping adds risk without a functional gap.
+- Keeping the provider abstraction means a later migration is a factory change, not a rewrite.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Move generation to Jina | No validated generation endpoint at the time; unnecessary churn |
+| Move vision to Jina | Same reasoning; vision JSON contract already validated on the current path |
+
+### Consequences
+
+- `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` / `AI_VISION_MODEL` remain the chat/vision config; `JINA_*` covers embeddings only.
+
+---
+
+## 36. ADR-035: Fail-Fast LLM Call Policy (30s Timeout, No SDK Retries)
+
+**Status:** Accepted
+
+### Context
+
+The OpenAI SDK defaulted to 60s timeout and 2 automatic retries, which multiplied worst-case latency (up to ~3 minutes) inside a single user-facing request and could mask provider failures with slow success.
+
+### Decision
+
+- Client config: `timeout: 30_000`, `maxRetries: 0`.
+- Retry decisions belong to the orchestration layer (`isRetryableAIError()` + typed errors), not the SDK.
+
+### Rationale
+
+- A fail-fast call surfaces as a typed `ProviderTimeoutError`/`ProviderRateLimitError` quickly; the recommendation pipeline degrades to rule-based suggestions instead of hanging.
+- Single responsibility: the client transports, the orchestration layer retries.
+
+### Alternatives Considered
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Keep SDK retries (60s, 2 retries) | Worst case ~3 min per request; hides degradation |
+| Custom retry loop in client | Duplicates orchestration logic; hard to test |
+
+### Consequences
+
+- Committed as `90aa62f`. Every provider call now fails fast; user-facing latency is bounded.
+- Integration tests that assert timeout/retry behavior must mock the client; no real calls in the suite.
+
+---
+
 ## Appendix: Decision Log
 
 | Date | Decision | Status |
@@ -1219,6 +1380,11 @@ Wardrobe items require photos. Supabase Storage needs project setup and credenti
 | 2026-08-07 | ADR-028: Client-Safe Shared Constants in src/lib | Accepted |
 | 2026-08-07 | ADR-029: Demo-Mode Auth Fallback | Accepted |
 | 2026-08-07 | ADR-030: Image Storage Abstraction with Data-URL Fallback | Accepted |
+| 2026-08-08 | ADR-031: Separate Embedding Provider (Jina AI) | Accepted |
+| 2026-08-08 | ADR-032: jina-embeddings-v4 with Explicit 1536 Dimensions (No Migration) | Accepted |
+| 2026-08-08 | ADR-033: Deterministic Embedding Fallback Retained as Emergency Path | Accepted |
+| 2026-08-08 | ADR-034: Chat/Vision Stay on OpenAI-Compatible Endpoint | Accepted |
+| 2026-08-08 | ADR-035: Fail-Fast LLM Call Policy (30s Timeout, No SDK Retries) | Accepted |
 
 ---
 

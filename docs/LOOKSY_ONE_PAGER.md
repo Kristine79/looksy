@@ -131,10 +131,10 @@ MVP scope (per product roadmap, planned for Q3 2026):
 | Language | TypeScript (strict) |
 | Database | PostgreSQL + pgvector |
 | ORM | Drizzle ORM |
-| Auth | Clerk |
-| Vision AI | OpenAI GPT-4o Vision |
-| Embeddings | text-embedding-3-small (1536-dim) |
-| Deployment | Vercel |
+| Auth | Clerk (demo-mode fallback) |
+| Chat / generation | OpenAI-compatible endpoint (deepseek-v4-flash) |
+| Vision AI | OpenAI-compatible vision (qwen3.7-plus) |
+| Embeddings | Jina AI jina-embeddings-v4 (1536-dim) |
 
 Architecture notes: modular architecture · scalable AI provider abstraction · vector-based personalization foundation.
 

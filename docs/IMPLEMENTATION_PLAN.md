@@ -145,24 +145,24 @@ cd looksy
 
 ```bash
 # Core dependencies
-pnpm add drizzle-orm postgres
-pnpm add -D drizzle-kit
-pnpm add @clerk/nextjs
-pnpm add openai
-pnpm add zod
+npm install drizzle-orm postgres
+npm install -D drizzle-kit
+npm install @clerk/nextjs
+npm install openai
+npm install zod
 
 # UI dependencies
-pnpm add @tanstack/react-query
-pnpm add react-hook-form @hookform/resolvers
-pnpm add lucide-react
+npm install @tanstack/react-query
+npm install react-hook-form @hookform/resolvers
+npm install lucide-react
 
 # Testing
-pnpm add -D vitest @testing-library/react @testing-library/jest-dom
-pnpm add -D @vitejs/plugin-react
+npm install -D vitest @testing-library/react @testing-library/jest-dom
+npm install -D @vitejs/plugin-react
 
 # Development
-pnpm add -D prettier eslint-config-prettier
-pnpm add -D @typescript-eslint/eslint-plugin
+npm install -D prettier eslint-config-prettier
+npm install -D @typescript-eslint/eslint-plugin
 ```
 
 #### Step 3.2.4: Folder Architecture
@@ -220,8 +220,8 @@ CLERK_SECRET_KEY=""
 NEXT_PUBLIC_CLERK_SIGN_IN_URL="/sign-in"
 NEXT_PUBLIC_CLERK_SIGN_UP_URL="/sign-up"
 
-# OpenAI
-OPENAI_API_KEY=""
+# AI
+AI_API_KEY=""
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=""
@@ -520,11 +520,11 @@ import "@testing-library/jest-dom";
 
 ### 3.3 Phase Exit Criteria
 
-- [ ] `pnpm dev` starts without errors
-- [ ] `pnpm build` succeeds
-- [ ] `pnpm lint` passes
-- [ ] `pnpm typecheck` passes
-- [ ] `pnpm test` passes
+- [ ] `npm run dev` starts without errors
+- [ ] `npm run build` succeeds
+- [ ] `npm run lint` passes
+- [ ] `npm run typecheck` passes
+- [ ] `npm test` passes
 - [ ] Application shows empty page at localhost:3000
 - [ ] Folder structure matches spec
 - [ ] ESLint module boundaries configured
@@ -587,10 +587,10 @@ export * from "../../modules/subscriptions/schema";
 
 ```bash
 # Generate migration files
-pnpm drizzle-kit generate
+npm run db:generate
 
 # Apply migrations
-pnpm drizzle-kit migrate
+npm run db:migrate
 ```
 
 #### Step 4.2.4: Seed Data
@@ -1225,10 +1225,10 @@ export function TrustLayer({ outfit }: TrustLayerProps) {
 
 Before moving to next phase:
 
-- [ ] All code passes `pnpm lint`
-- [ ] All code passes `pnpm typecheck`
-- [ ] All tests pass (`pnpm test`)
-- [ ] `pnpm build` succeeds
+- [ ] All code passes `npm run lint`
+- [ ] All code passes `npm run typecheck`
+- [ ] All tests pass (`npm test`)
+- [ ] `npm run build` succeeds
 - [ ] Application runs locally
 - [ ] No console errors
 - [ ] Documentation updated
