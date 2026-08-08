@@ -65,7 +65,9 @@ describe("FeedbackButtons", () => {
 
     fireEvent.click(screen.getByText("Not for me"));
     await waitFor(() => {
-      expect(notForMeActionMock).toHaveBeenCalledWith(look.outfitId);
+      expect(notForMeActionMock).toHaveBeenCalledWith(look.outfitId, {
+        occasion: look.occasion ?? undefined,
+      });
       expect(onRegenerate).toHaveBeenCalled();
     });
   });

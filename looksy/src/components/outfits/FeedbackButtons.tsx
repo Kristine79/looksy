@@ -90,7 +90,7 @@ export function FeedbackButtons({
     love: () => loveOutfitAction(look.outfitId),
     wore: () => woreOutfitAction(look.outfitId, look.items.map((entry) => entry.item.id)),
     change: () => changeItemAction(look.outfitId, swapOut, swapIn || null),
-    skip: () => notForMeAction(look.outfitId),
+    skip: () => notForMeAction(look.outfitId, { occasion: look.occasion ?? undefined }),
   };
 
   return (

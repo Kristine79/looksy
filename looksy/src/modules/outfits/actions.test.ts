@@ -78,7 +78,16 @@ describe("feedback actions (Feedback Loop)", () => {
   it("notForMeAction records a skip signal", async () => {
     feedbackMocks.recordSkip.mockResolvedValue({ id: "feedback-3" });
     await notForMeAction(OUTFIT_ID);
-    expect(feedbackMocks.recordSkip).toHaveBeenCalledWith("user-1", { outfitId: OUTFIT_ID });
+    expect(feedbackMocks.recordSkip).toHaveBeenCalledWith("user-1", { outfitId: OUTFIT_ID, context: undefined });
+  });
+
+  it("notForMeAction forwards the occasion context (negative memory training)", async () => {
+    feedbackMocks.recordSkip.mockResolvedValue({ id: "feedback-3" });
+    await notForMeAction(OUTFIT_ID, { occasion: "formal" });
+    expect(feedbackMocks.recordSkip).toHaveBeenCalledWith("user-1", {
+      outfitId: OUTFIT_ID,
+      context: { occasion: "formal" },
+    });
   });
 
   it("rejects malformed ids", async () => {

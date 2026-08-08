@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentUserId } from "@/modules/auth/server";
 import { db } from "@/lib/db/client";
 import { FeedbackService, OutfitsRepository } from "@/modules/outfits";
+import type { FeedbackContext } from "@/modules/outfits/schema";
 import { createMemoryAutomationHook } from "@/modules/recommendations/server";
 import { ANALYTICS_EVENTS, emitEvent } from "@/modules/analytics";
 import type { MemoryAutomationHook } from "@/modules/outfits/feedbackService";
@@ -72,10 +73,13 @@ export async function changeItemAction(
   return { ok: true };
 }
 
-export async function notForMeAction(outfitId: string) {
+export async function notForMeAction(
+  outfitId: string,
+  context?: FeedbackContext
+) {
   const userId = await getCurrentUserId();
   itemIdSchema.parse(outfitId);
-  await feedbackService().recordSkip(userId, { outfitId });
+  await feedbackService().recordSkip(userId, { outfitId, context });
   emitEvent(userId, ANALYTICS_EVENTS.OUTFIT_SKIPPED, { outfitId });
   revalidatePath("/dashboard/recommendations");
   return { ok: true };
