@@ -26,8 +26,12 @@ export function getOpenAIClient(): OpenAI {
   cachedClient = new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
-    timeout: 60_000,
-    maxRetries: 2,
+    // Fail-fast contract: recommendation requests must not hang for minutes on
+    // a slow provider. The SDK retries timeouts too, so automatic retries are
+    // disabled — a single bounded attempt keeps the deterministic fallback UX
+    // reachable within ~30s instead of 60-180s.
+    timeout: 30_000,
+    maxRetries: 0,
   });
   return cachedClient;
 }
