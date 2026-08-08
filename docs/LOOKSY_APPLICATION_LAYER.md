@@ -201,7 +201,7 @@ AIProvider.generateOutfits(request)     ← Phase 4 (OpenAI or local)
         ↓
 OutfitService.createOutfit(userId, result) + FeedbackService.recordSave/recordSwap
         ↓
-FashionMemoryService signals from feedback (future decay service, ADR-014)
+MemoryAutomationService.processSignals(userId)  ← Phase 7, ADR-014: behavioral signals → fashion memories
 ```
 
 Current boundaries: everything up to `AIProvider` exists. `AIProvider` is a typed contract (`src/modules/ai/types.ts`).

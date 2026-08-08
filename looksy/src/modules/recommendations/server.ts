@@ -20,6 +20,7 @@ import { FALLBACK_MESSAGE, buildEmptyResult, buildFallbackRecommendation } from 
 import {
   FashionMemoryService,
   MemoriesRepository,
+  MemoryAutomationService,
   PromptBuilder,
   RecommendationContextService,
   RecommendationService,
@@ -30,6 +31,7 @@ import type {
   OutfitRecommendation,
   RecommendationResult,
 } from "@/modules/recommendations";
+import type { MemoryAutomationHook } from "@/modules/outfits/feedbackService";
 
 export const OCCASIONS_LIST = OCCASIONS;
 
@@ -344,4 +346,22 @@ function lookName(recommendation: OutfitRecommendation, occasion: string | null)
     return occasion[0]!.toUpperCase() + occasion.slice(1);
   }
   return "Today's Look";
+}
+
+/**
+ * Composition root for the Fashion Memory automation trigger. Returns a no-arg
+ * hook the Outfits feedback actions inject into FeedbackService so every wear /
+ * save / swap / skip event flows into the memory-learning pipeline.
+ *
+ * Lives here (rather than in the outfits module) to keep the import direction
+ * one-way: outfits ← recommendations. The hook is a thin closure over the
+ * MemoryAutomationService — the domain contract of FeedbackService stays a
+ * function-shaped dependency, so the outfits module never imports the
+ * recommendations types directly.
+ */
+export function createMemoryAutomationHook(): MemoryAutomationHook {
+  const automation = new MemoryAutomationService(new MemoriesRepository(db));
+  return async (userId: string) => {
+    await automation.processSignals(userId);
+  };
 }

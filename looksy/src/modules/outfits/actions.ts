@@ -5,18 +5,35 @@ import { z } from "zod";
 import { getCurrentUserId } from "@/modules/auth/server";
 import { db } from "@/lib/db/client";
 import { FeedbackService, OutfitsRepository } from "@/modules/outfits";
+import { createMemoryAutomationHook } from "@/modules/recommendations/server";
+import type { MemoryAutomationHook } from "@/modules/outfits/feedbackService";
 
 /**
  * Feedback Loop API — every action records a signal through FeedbackService,
- * feeding the Fashion Memory training pipeline.
+ * feeding the Fashion Memory training pipeline (Phase 7). The automation hook
+ * turns wear/save/skip/swap events into evidence-backed memories.
+ *
+ * The hook is built lazily on first use so importing this module in a context
+ * without the recommendations import resolution cost set up (e.g. unit tests
+ * that mock the whole module) never triggers a heavy construction at import.
  */
 
 const itemIdSchema = z.string().uuid();
 
+let memoryHook: MemoryAutomationHook | null = null;
+function getMemoryHook(): MemoryAutomationHook {
+  if (!memoryHook) memoryHook = createMemoryAutomationHook();
+  return memoryHook;
+}
+
+function feedbackService() {
+  return new FeedbackService(new OutfitsRepository(db), getMemoryHook());
+}
+
 export async function loveOutfitAction(outfitId: string) {
   const userId = await getCurrentUserId();
   itemIdSchema.parse(outfitId);
-  await new FeedbackService(new OutfitsRepository(db)).recordSave(userId, { outfitId });
+  await feedbackService().recordSave(userId, { outfitId });
   revalidatePath("/dashboard/recommendations");
   return { ok: true };
 }
@@ -25,7 +42,7 @@ export async function woreOutfitAction(outfitId: string, itemIds: string[]) {
   const userId = await getCurrentUserId();
   itemIdSchema.parse(outfitId);
   const parsedIds = z.array(itemIdSchema).min(1).max(12).parse(itemIds);
-  await new FeedbackService(new OutfitsRepository(db)).recordWear(userId, {
+  await feedbackService().recordWear(userId, {
     outfitId,
     itemIds: parsedIds,
     source: "recommendation",
@@ -43,7 +60,7 @@ export async function changeItemAction(
   itemIdSchema.parse(outfitId);
   itemIdSchema.parse(swapOutItemId);
   const parsedSwapIn = swapInItemId ? itemIdSchema.parse(swapInItemId) : null;
-  await new FeedbackService(new OutfitsRepository(db)).recordSwap(userId, {
+  await feedbackService().recordSwap(userId, {
     outfitId,
     swapOutItemId,
     swapInItemId: parsedSwapIn,
@@ -55,7 +72,7 @@ export async function changeItemAction(
 export async function notForMeAction(outfitId: string) {
   const userId = await getCurrentUserId();
   itemIdSchema.parse(outfitId);
-  await new FeedbackService(new OutfitsRepository(db)).recordSkip(userId, { outfitId });
+  await feedbackService().recordSkip(userId, { outfitId });
   revalidatePath("/dashboard/recommendations");
   return { ok: true };
 }

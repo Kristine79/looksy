@@ -10,6 +10,7 @@ export type {
 } from "./schema";
 export { MemoriesRepository } from "./repository";
 export { FashionMemoryService, computeStatusFromConfidence } from "./service";
+export { MemoryAutomationService, freshnessFactor, SIGNAL_WEIGHTS, CREATION_SIGNAL_THRESHOLD, USER_CORRECTION_OVERRIDE_FRESH_SIGNALS } from "./automationService";
 export { RecommendationContextService } from "./contextService";
 export type {
   CreateMemoryInput,

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type * as schema from "@/lib/db/schema";
 import { clothingItems } from "@/modules/closet/schema";
@@ -37,6 +37,91 @@ export class MemoriesRepository {
     return rows[0] ?? null;
   }
 
+  /**
+   * Finds existing memories for a user that share the same (type, category) key.
+   * Used by MemoryAutomationService to prevent duplicate memories — the same
+   * semantic pattern ("prefers navy" / "likes navy" / "often chooses navy")
+   * must accumulate as evidence on one canonical memory, not three rows.
+   * Returns all statuses (including `deleted`, so the automation can detect
+   * user-rejected patterns and avoid recreating them).
+   */
+  async findMemoryByTypeCategory(userId: string, type: string, category: string) {
+    return this.db
+      .select()
+      .from(fashionMemories)
+      .where(
+        and(
+          eq(fashionMemories.userId, userId),
+          eq(fashionMemories.type, type),
+          eq(fashionMemories.category, category),
+        ),
+      )
+      .orderBy(desc(fashionMemories.updatedAt));
+  }
+
+  /**
+   * Loads all non-deleted memories for a user with their evidence — the inputs
+   * to a decay pass (time-based confidence recompute). Sorted by updatedAt so
+   * recent signals are evaluated first; matches the index order in `findMemories`.
+   */
+  async findMemoriesForDecay(userId: string) {
+    const memories = await this.db
+      .select()
+      .from(fashionMemories)
+      .where(
+        and(
+          eq(fashionMemories.userId, userId),
+          sql`${fashionMemories.status} <> 'deleted'`,
+        ),
+      )
+      .orderBy(desc(fashionMemories.updatedAt));
+
+    if (memories.length === 0) {
+      return [];
+    }
+    const ids = memories.map((m) => m.id);
+    const evidenceRows = await this.db
+      .select()
+      .from(memoryEvidence)
+      .where(inArray(memoryEvidence.memoryId, ids))
+      .orderBy(asc(memoryEvidence.createdAt));
+
+    const byMemory = new Map<string, typeof evidenceRows>();
+    for (const row of evidenceRows) {
+      const list = byMemory.get(row.memoryId) ?? [];
+      list.push(row);
+      byMemory.set(row.memoryId, list);
+    }
+    return memories.map((memory) => ({
+      memory,
+      evidence: byMemory.get(memory.id) ?? [],
+    }));
+  }
+
+  /**
+   * Finds a positive-form memory (color/style/context preference) whose category
+   * carries the given tag. Used by MemoryAutomationService to resolve negative
+   * signals (e.g. repeated skips of "formal" outfits) against existing positive
+   * preferences — the two must conflict on the same memory instead of spawning
+   * a contradictory duplicate.
+   */
+  async findPositiveMemoryByTag(userId: string, tag: string) {
+    const categories = [`style:${tag}`, `color:${tag}`, `context:${tag}`];
+    const rows = await this.db
+      .select()
+      .from(fashionMemories)
+      .where(
+        and(
+          eq(fashionMemories.userId, userId),
+          sql`${fashionMemories.status} <> 'deleted'`,
+          inArray(fashionMemories.category, categories),
+        ),
+      )
+      .orderBy(desc(fashionMemories.confidence))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async findMemories(userId: string, query: MemoryQuery = {}) {
     const conditions = [eq(fashionMemories.userId, userId)];
     if (query.status) {
@@ -53,6 +138,26 @@ export class MemoriesRepository {
       .orderBy(desc(fashionMemories.confidence))
       .limit(query.limit ?? 50)
       .offset(query.offset ?? 0);
+  }
+
+  /**
+   * Returns the user's non-deleted memories ordered by confidence — used by the
+   * RecommendationContextService to populate the prompt without leaking
+   * user-rejected (`deleted`) preferences. Phase 7 appliance of ADR-018
+   * (soft-delete via status) at the read boundary.
+   */
+  async findActiveMemories(userId: string, limit: number) {
+    return this.db
+      .select()
+      .from(fashionMemories)
+      .where(
+        and(
+          eq(fashionMemories.userId, userId),
+          sql`${fashionMemories.status} <> 'deleted'`,
+        ),
+      )
+      .orderBy(desc(fashionMemories.confidence))
+      .limit(limit);
   }
 
   async insertEvidence(memoryId: string, input: EvidenceInput) {
@@ -99,7 +204,14 @@ export class MemoriesRepository {
 
   async findUserFeedback(userId: string, limit: number) {
     return this.db
-      .select({ action: outfitFeedback.action, rating: outfitFeedback.rating, createdAt: outfitFeedback.createdAt })
+      .select({
+        id: outfitFeedback.id,
+        action: outfitFeedback.action,
+        rating: outfitFeedback.rating,
+        outfitId: outfitFeedback.outfitId,
+        context: outfitFeedback.context,
+        createdAt: outfitFeedback.createdAt,
+      })
       .from(outfitFeedback)
       .where(eq(outfitFeedback.userId, userId))
       .orderBy(desc(outfitFeedback.createdAt))
