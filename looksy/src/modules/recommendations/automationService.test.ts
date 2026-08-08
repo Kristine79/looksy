@@ -73,6 +73,21 @@ function makeSkip(overrides: Partial<OutfitFeedbackRow>): OutfitFeedbackRow {
   } as OutfitFeedbackRow;
 }
 
+function makeSave(overrides: Partial<OutfitFeedbackRow>): OutfitFeedbackRow {
+  return {
+    id: "fb-save-1",
+    userId: "user-1",
+    outfitId: "outfit-1",
+    action: "save",
+    rating: null,
+    feedbackTags: null,
+    notes: null,
+    context: { occasion: "work" },
+    createdAt: new Date("2026-08-01"),
+    ...overrides,
+  } as OutfitFeedbackRow;
+}
+
 function makeEvidence(overrides: Partial<MemoryEvidenceRow> = {}): MemoryEvidenceRow {
   return {
     id: "ev-1",
@@ -279,6 +294,27 @@ describe("MemoryAutomationService.processSignals", () => {
       "user-1",
       expect.objectContaining({ type: "negative_preference", category: "negative:formal" }),
     );
+  });
+
+  it("creates a context_preference memory from repeated save signals with the same context tag", async () => {
+    getRepo(repo).findUserFeedback.mockResolvedValue([
+      makeSave({ id: "fb-1", outfitId: "outfit-1" }),
+      makeSave({ id: "fb-2", outfitId: "outfit-2" }),
+    ]);
+    const result = await service.processSignals("user-1");
+    expect(result.candidatesEvaluated).toBe(1);
+    expect(getRepo(repo).insertMemory).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ type: "context_preference", category: "context:work" }),
+    );
+  });
+
+  it("does not create a context_preference from a single save signal", async () => {
+    getRepo(repo).findUserFeedback.mockResolvedValue([
+      makeSave({ id: "fb-1", outfitId: "outfit-1" }),
+    ]);
+    await service.processSignals("user-1");
+    expect(getRepo(repo).insertMemory).not.toHaveBeenCalled();
   });
 
   it("respects a user-rejected memory until fresh signals exceed the override", async () => {

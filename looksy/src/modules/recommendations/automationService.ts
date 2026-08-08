@@ -141,6 +141,7 @@ export class MemoryAutomationService {
     const candidates: CandidateMemory[] = [];
     candidates.push(...this.detectColorPreferences(wardrobe, wearHistory));
     candidates.push(...this.detectStyleTendencies(wardrobe, wearHistory));
+    candidates.push(...this.detectContextPreferences(feedback));
     candidates.push(...this.detectNegativePreferences(feedback));
     return candidates;
   }
@@ -224,6 +225,48 @@ export class MemoryAutomationService {
           sourceId: item.id,
           data: { itemId: item.id, wearCount: item.wearCount },
           weight: SIGNAL_WEIGHTS.worn_frequency,
+        })),
+      });
+    }
+    return candidates;
+  }
+
+  /**
+   * Detects dominant context tags from previous positive feedback signals. The
+   * user's feedback context (occasion / weather) on `save` actions is the
+   * positive signal — repeatedly saving outfits for the same context creates a
+   * `context_preference` memory (e.g. `context:work` → "prefers work outfits").
+   *
+   * This is the positive counterpart to `detectNegativePreferences`: negative
+   * signals come from repeated `skip` actions, positive from repeated `save`
+   * actions, on the same context tag.
+   */
+  private detectContextPreferences(feedback: FeedbackSignal[]): CandidateMemory[] {
+    const saveActions = feedback.filter((row) => row.action === "save");
+    const saveContextCounts = new Map<string, FeedbackSignal[]>();
+    for (const action of saveActions) {
+      const tag = readSkipContext(action);
+      if (!tag) continue;
+      const slug = normalizeCategory(tag);
+      const list = saveContextCounts.get(slug) ?? [];
+      list.push(action);
+      saveContextCounts.set(slug, list);
+    }
+    const candidates: CandidateMemory[] = [];
+    for (const [contextSlug, actions] of saveContextCounts) {
+      if (actions.length < CREATION_SIGNAL_THRESHOLD) continue;
+      candidates.push({
+        type: "context_preference",
+        category: `context:${contextSlug}`,
+        description: `Prefers ${contextSlug} outfits`,
+        polarity: "positive",
+        evidence: actions.slice(0, 6).map((action) => ({
+          type: "saved_preference",
+          text: `Saved an outfit tagged ${contextSlug}`,
+          sourceType: "outfit_feedback",
+          sourceId: action.outfitId ?? undefined,
+          data: { actionId: action.id, action: "save", tag: contextSlug },
+          weight: SIGNAL_WEIGHTS.saved_preference,
         })),
       });
     }

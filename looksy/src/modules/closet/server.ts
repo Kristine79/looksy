@@ -88,7 +88,7 @@ export async function addClothingItemWithAnalysis(
   );
 
   const freshItem = await closetRepository.findItemById(item.id);
-  const photos = await closetRepository.findPhotosByItemIds([item.id]);
+  const photos = await closetRepository.findPhotosByItemIds(userId, [item.id]);
   return {
     item: { ...(freshItem ?? item), photos },
     analysis,
@@ -105,7 +105,7 @@ export async function reprocessClothingAnalysis(
   const closetRepository = new ClosetRepository(db);
 
   await new ClosetService(closetRepository).getItem(userId, itemId);
-  const photos = await closetRepository.findPhotosByItemIds([itemId]);
+  const photos = await closetRepository.findPhotosByItemIds(userId, [itemId]);
   const primaryPhoto = photos.find((p) => p.isPrimary) ?? photos[0];
   if (!primaryPhoto) {
     throw new Error("This item has no photo to analyze");

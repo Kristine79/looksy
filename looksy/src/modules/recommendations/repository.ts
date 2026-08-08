@@ -8,6 +8,15 @@ import type { CreateMemoryInput, EvidenceInput, MemoryQuery } from "./types";
 
 export type DbClient = PostgresJsDatabase<typeof schema>;
 
+/**
+ * Statuses that are excluded from the active recommendation context.
+ * `deleted` = user-rejected (ADR-018 soft delete); `fading`/`dormant` = decayed
+ * below an impactful confidence (ADR-014). Keeping them out of the active
+ * boundary means the recommendation prompt only sees current preferences.
+ * Exported as a plain array so the filter rule is testable without a database.
+ */
+export const INACTIVE_MEMORY_STATUSES = ["deleted", "fading", "dormant"] as const;
+
 export class MemoriesRepository {
   constructor(private readonly db: DbClient) {}
 
@@ -141,10 +150,14 @@ export class MemoriesRepository {
   }
 
   /**
-   * Returns the user's non-deleted memories ordered by confidence — used by the
-   * RecommendationContextService to populate the prompt without leaking
-   * user-rejected (`deleted`) preferences. Phase 7 appliance of ADR-018
-   * (soft-delete via status) at the read boundary.
+   * Returns the user's active recommendation memories ordered by confidence —
+   * used by the RecommendationContextService to populate the prompt without
+   * leaking:
+   *   - user-rejected (`deleted`) preferences (ADR-018 soft-delete boundary), and
+   *   - `fading` / `dormant` memories that no longer carry enough confidence to
+   *     influence a recommendation (their status already reflects staleness
+   *     from the decay pass; keeping them out of the active context keeps the
+   *     prompt focused on current style).
    */
   async findActiveMemories(userId: string, limit: number) {
     return this.db
@@ -153,7 +166,9 @@ export class MemoriesRepository {
       .where(
         and(
           eq(fashionMemories.userId, userId),
-          sql`${fashionMemories.status} <> 'deleted'`,
+          ...INACTIVE_MEMORY_STATUSES.map(
+            (status) => sql`${fashionMemories.status} <> ${status}`,
+          ),
         ),
       )
       .orderBy(desc(fashionMemories.confidence))

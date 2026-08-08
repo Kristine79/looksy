@@ -62,7 +62,7 @@ export class ClosetRepository {
       return [];
     }
 
-    const photos = await this.findPhotosByItemIds(items.map((i) => i.id));
+    const photos = await this.findPhotosByItemIds(userId, items.map((i) => i.id));
     const photosByItem = new Map<string, typeof photos>();
     for (const photo of photos) {
       const list = photosByItem.get(photo.itemId) ?? [];
@@ -76,14 +76,36 @@ export class ClosetRepository {
     }));
   }
 
-  async findPhotosByItemIds(itemIds: string[]) {
+  /**
+   * Returns photos for the given item IDs, scoped to a single user.
+   * The items must belong to `userId`; photos for items owned by other users
+   * are never returned (cross-user isolation — item_photos has no user_id
+   * column, so we enforce ownership by joining through clothing_items).
+   */
+  async findPhotosByItemIds(userId: string, itemIds: string[]) {
     if (itemIds.length === 0) {
       return [];
     }
     return this.db
-      .select()
+      .select({
+        id: itemPhotos.id,
+        itemId: itemPhotos.itemId,
+        url: itemPhotos.url,
+        thumbnailUrl: itemPhotos.thumbnailUrl,
+        storagePath: itemPhotos.storagePath,
+        isPrimary: itemPhotos.isPrimary,
+        sortOrder: itemPhotos.sortOrder,
+        metadata: itemPhotos.metadata,
+        createdAt: itemPhotos.createdAt,
+      })
       .from(itemPhotos)
-      .where(sql`${itemPhotos.itemId} in ${itemIds}`)
+      .innerJoin(clothingItems, eq(clothingItems.id, itemPhotos.itemId))
+      .where(
+        and(
+          eq(clothingItems.userId, userId),
+          sql`${itemPhotos.itemId} in ${itemIds}`,
+        ),
+      )
       .orderBy(asc(itemPhotos.sortOrder));
   }
 

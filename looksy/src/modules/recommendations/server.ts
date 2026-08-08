@@ -338,7 +338,7 @@ async function resolveLookItems(userId: string, items: ClothingItemRow[]): Promi
   if (items.length === 0) {
     return [];
   }
-  const photos = await new ClosetRepository(db).findPhotosByItemIds(items.map((i) => i.id));
+  const photos = await new ClosetRepository(db).findPhotosByItemIds(userId, items.map((i) => i.id));
   const photosByItem = new Map<string, LookItem["photos"]>();
   for (const photo of photos) {
     const list = photosByItem.get(photo.itemId) ?? [];
