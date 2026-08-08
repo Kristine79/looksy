@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { db } from "@/lib/db/client";
+import { logger } from "@/lib/logger";
 import { OCCASIONS } from "@/lib/occasions";
+import { AIError } from "@/modules/ai/errors";
 import { ClosetRepository } from "@/modules/closet";
 import {
   EmbeddingsRepository,
@@ -14,6 +16,7 @@ import type {
   OutfitScores,
   WeatherSnapshot,
 } from "@/modules/outfits";
+import { FALLBACK_MESSAGE, buildEmptyResult, buildFallbackRecommendation } from "./fallback";
 import {
   FashionMemoryService,
   MemoriesRepository,
@@ -63,6 +66,10 @@ export interface TodayLookResult {
   scores: OutfitScores | null;
   model: string;
   createdAt: Date;
+  /** True when the AI provider was unavailable and a deterministic fallback was used. */
+  degraded?: boolean;
+  /** Non-technical user-facing notice shown alongside a degraded look. */
+  message?: string | null;
 }
 
 export interface LookCard {
@@ -96,6 +103,12 @@ function evidenceStringsToItems(evidence: string[]): EvidenceItem[] {
 /**
  * Generates a fresh recommendation, persists it as an outfit and returns a
  * fully resolved look (items + photos) ready for the UI.
+ *
+ * Resilience contract: this function NEVER throws on AI/provider failure. When
+ * the AI provider is unavailable (auth, timeout, 5xx, network, rate limit), a
+ * deterministic fallback outfit is built from the user's wardrobe and returned
+ * with `degraded: true` + a non-technical `message`. Only non-AI failures
+ * (e.g. database outage) propagate.
  */
 export async function getTodayLook(
   userId: string,
@@ -104,16 +117,85 @@ export async function getTodayLook(
   const parsed = todayLookInputSchema.parse(input);
   const occasion = parsed.occasion ?? null;
   const weather = (parsed.weather ?? null) as WeatherSnapshot | null;
+  const query = occasion ? `a ${occasion} outfit` : "an outfit for today";
 
-  const result: RecommendationResult = await buildRecommendationEngine().recommend({
-    userId,
-    query: occasion ? `a ${occasion} outfit` : "an outfit for today",
-    occasion,
-    weather,
-    candidatesLimit: 12,
-  });
-
+  const closetRepository = new ClosetRepository(db);
   const outfitService = new OutfitService(new OutfitsRepository(db));
+
+  // Early empty-wardrobe check — avoids the embedding/retrieval call entirely
+  // when the user has no active items.
+  const probe = await closetRepository.findItems(userId, { status: "active", limit: 1 });
+  if (probe.length === 0) {
+    const empty = buildEmptyResult();
+    const outfit = await outfitService.createOutfit(
+      userId,
+      {
+        name: lookName(empty.recommendation, occasion),
+        source: "ai",
+        occasion,
+        mood: parsed.mood ?? null,
+        weather: weather ?? undefined,
+        explanation: empty.recommendation.explanation.whyChosen,
+        scores: { total: empty.recommendation.confidence },
+        evidence: evidenceStringsToItems(empty.evidence),
+        generationContext: { candidatesCount: 0, model: empty.model, promptVersion: "phase-6" },
+      },
+      [],
+    );
+    return {
+      outfitId: outfit.id,
+      name: outfit.name ?? "Today's Look",
+      occasion,
+      status: outfit.status,
+      recommendation: empty.recommendation,
+      items: [],
+      evidence: [],
+      scores: { total: empty.recommendation.confidence },
+      model: empty.model,
+      createdAt: outfit.createdAt,
+      degraded: false,
+      message: null,
+    };
+  }
+
+  let result: RecommendationResult;
+  let degraded = false;
+  let message: string | null = null;
+
+  try {
+    result = await buildRecommendationEngine().recommend({
+      userId,
+      query,
+      occasion,
+      weather,
+      candidatesLimit: 12,
+    });
+  } catch (error) {
+    const code = error instanceof AIError ? error.code : "UNKNOWN";
+    const retryable = error instanceof AIError ? error.retryable : false;
+    logger.warn("recommendation_fallback", {
+      code,
+      retryable,
+      model: getAIProviderConfig().generationModel,
+      error: error instanceof Error ? error.message : "unknown error",
+      timestamp: new Date().toISOString(),
+    });
+
+    const activeItems = await closetRepository.findItems(userId, { status: "active" });
+    const fallback = buildFallbackRecommendation(activeItems);
+    result = {
+      userId,
+      query,
+      recommendation: fallback.recommendation,
+      items: fallback.items,
+      evidence: [],
+      model: fallback.model,
+      createdAt: new Date(),
+    };
+    degraded = true;
+    message = FALLBACK_MESSAGE;
+  }
+
   const outfit = await outfitService.createOutfit(
     userId,
     {
@@ -129,6 +211,7 @@ export async function getTodayLook(
         candidatesCount: result.items.length,
         model: result.model,
         promptVersion: "phase-6",
+        degraded,
       },
     },
     result.recommendation.outfit.map((entry, index) => ({
@@ -150,6 +233,8 @@ export async function getTodayLook(
     scores: { total: result.recommendation.confidence },
     model: result.model,
     createdAt: outfit.createdAt,
+    degraded,
+    message,
   };
 }
 

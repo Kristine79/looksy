@@ -21,6 +21,10 @@ export interface TodayLookExperienceProps {
  * The main product screen — generates, displays and refines Today's Look.
  * Server actions stay the only data path; this component only orchestrates
  * loading/error/empty states around them.
+ *
+ * Degraded state: when the AI provider was unavailable, the action returns a
+ * deterministic fallback look with `degraded: true` + a non-technical message.
+ * We show the outfit with a small notice banner — never a technical error.
  */
 export function TodayLookExperience({
   initialLook,
@@ -28,20 +32,32 @@ export function TodayLookExperience({
   swapCandidates = [],
 }: TodayLookExperienceProps) {
   const [look, setLook] = useState<TodayLookResult | null>(initialLook);
+  const [degradedNotice, setDegradedNotice] = useState<string | null>(
+    initialLook?.degraded ? initialLook.message ?? null : null,
+  );
   const [occasion, setOccasion] = useState<Occasion | "">("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function generate() {
+  async function runGenerate(): Promise<TodayLookResult | null> {
     setGenerating(true);
     setError(null);
     try {
-      const fresh = await getTodayLookAction({
+      const result = await getTodayLookAction({
         occasion: occasion || null,
       });
-      setLook(fresh);
+      if (result.error || !result.look) {
+        setError(result.message ?? "Could not generate a look right now");
+        setDegradedNotice(null);
+        return null;
+      }
+      setLook(result.look);
+      setDegradedNotice(result.degraded ? result.message ?? null : null);
+      return result.look;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate a look right now");
+      setDegradedNotice(null);
+      return null;
     } finally {
       setGenerating(false);
     }
@@ -78,7 +94,7 @@ export function TodayLookExperience({
                 </option>
               ))}
             </select>
-            <Button type="button" onClick={generate} loading={generating}>
+            <Button type="button" onClick={runGenerate} loading={generating}>
               {look ? "New look" : "Generate look"}
             </Button>
           </div>
@@ -109,20 +125,30 @@ export function TodayLookExperience({
         ) : error ? (
           <div className="rounded-2xl border border-error/30 bg-error/5 p-8 text-center">
             <p className="text-sm font-medium text-error">{error}</p>
-            <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={generate}>
+            <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={runGenerate}>
               Try again
             </Button>
           </div>
         ) : look ? (
-          <OutfitCard
-            look={look}
-            swapCandidates={swapCandidates}
-            onRegenerate={async () => {
-              const fresh = await getTodayLookAction({ occasion: occasion || null });
-              setLook(fresh);
-              return fresh;
-            }}
-          />
+          <div className="space-y-3">
+            {degradedNotice && (
+              <div
+                role="status"
+                className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+              >
+                <span aria-hidden="true" className="mt-0.5">⚠</span>
+                <span>{degradedNotice}</span>
+              </div>
+            )}
+            <OutfitCard
+              look={look}
+              swapCandidates={swapCandidates}
+              onRegenerate={async () => {
+                const fresh = await runGenerate();
+                return fresh ?? look;
+              }}
+            />
+          </div>
         ) : (
           <EmptyState
             title={wardrobeCount === 0 ? "Your wardrobe is empty" : "Ready when you are"}
@@ -132,7 +158,7 @@ export function TodayLookExperience({
                 : "Choose an occasion and LOOKSY will build an outfit from your wardrobe — with real reasons for every choice."
             }
             action={
-              <Button type="button" onClick={generate} loading={generating}>
+              <Button type="button" onClick={runGenerate} loading={generating}>
                 Generate my first look
               </Button>
             }

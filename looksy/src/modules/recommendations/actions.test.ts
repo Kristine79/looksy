@@ -47,21 +47,45 @@ describe("recommendations actions", () => {
   });
 
   it("getTodayLookAction generates and persists a look", async () => {
-    recServerMocks.getTodayLook.mockResolvedValue({ outfitId: "outfit-1", name: "Work" });
+    const lookFixture = { outfitId: "outfit-1", name: "Work" };
+    recServerMocks.getTodayLook.mockResolvedValue(lookFixture);
 
     const result = await getTodayLookAction({ occasion: "work" });
 
     expect(getCurrentUserIdMock).toHaveBeenCalled();
     expect(recServerMocks.getTodayLook).toHaveBeenCalledWith("user-1", { occasion: "work" });
-    expect(result).toEqual({ outfitId: "outfit-1", name: "Work" });
+    expect(result).toEqual({
+      error: false,
+      degraded: false,
+      look: lookFixture,
+      message: null,
+    });
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/recommendations");
   });
 
-  it("rejects unknown occasions", async () => {
-    await expect(
-      getTodayLookAction({ occasion: "yolo" as never })
-    ).rejects.toThrow();
+  it("returns a structured error result for an invalid occasion instead of throwing", async () => {
+    const result = await getTodayLookAction({ occasion: "yolo" as never });
+
+    expect(result.error).toBe(true);
+    expect(result.look).toBeNull();
+    expect(result.message).not.toBeNull();
     expect(recServerMocks.getTodayLook).not.toHaveBeenCalled();
+  });
+
+  it("propagates degraded flag and message when AI is unavailable", async () => {
+    recServerMocks.getTodayLook.mockResolvedValue({
+      outfitId: "outfit-fallback",
+      name: "Casual",
+      degraded: true,
+      message: "AI is temporarily unavailable.",
+    });
+
+    const result = await getTodayLookAction({ occasion: "casual" });
+
+    expect(result.error).toBe(false);
+    expect(result.degraded).toBe(true);
+    expect(result.look?.outfitId).toBe("outfit-fallback");
+    expect(result.message).toBe("AI is temporarily unavailable.");
   });
 
   it("getLatestLookAction returns the latest outfit without AI", async () => {
