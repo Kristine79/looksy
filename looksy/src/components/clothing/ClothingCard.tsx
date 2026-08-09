@@ -1,8 +1,12 @@
+"use client";
+
 import type { WardrobeItemWithPhotos } from "@/modules/closet";
 import { resolvePhotoUrl } from "@/modules/storage";
 import { retryItemFormAction, archiveItemFormAction } from "@/modules/closet/actions";
 import { AiStatusBadge } from "./AiStatusBadge";
 import type { AiStatus } from "./AiStatusBadge";
+import { useTranslation } from "@/i18n/locale-provider";
+import { ShirtIcon, TrashIcon } from "@/components/ui/icons";
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -13,32 +17,36 @@ export interface ClothingCardProps {
 }
 
 /**
- * Wardrobe item card. Shows the photo, AI-extracted metadata and the AI status.
- * Failed items expose a "Re-analyze" action; the card is a server component —
- * retry/archive run as progressive-enhancement server actions.
+ * Wardrobe catalog card. Image-first and calm: the photo carries the card,
+ * metadata stays in small, quiet type. Items without a photo get an
+ * intentional editorial placeholder instead of a technical-looking box.
  */
 export function ClothingCard({ item }: ClothingCardProps) {
+  const { t } = useTranslation();
   const primaryPhoto = item.photos.find((p) => p.isPrimary) ?? item.photos[0];
   const imageUrl = primaryPhoto ? resolvePhotoUrl(primaryPhoto) : null;
   const analyzing = item.aiStatus === "pending" || item.aiStatus === "processing";
   const aiStatus = item.aiStatus as AiStatus;
-  const label = analyzing ? "Analyzing item" : capitalize(item.type);
+  const label = analyzing ? t("clothing.analyzingLabel") : capitalize(item.type);
+  const category = t(`categories.${item.type.toLowerCase()}`);
+  const categoryLabel = category !== `categories.${item.type.toLowerCase()}` ? category : label;
 
   return (
-    <article className="group overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md">
-      <div className="relative aspect-[4/5] overflow-hidden bg-neutral-100">
+    <article className="group overflow-hidden rounded-xl border border-line bg-surface transition-colors hover:border-line-strong">
+      <div className="relative aspect-[4/5] overflow-hidden bg-surface-muted">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
-            alt={`${label} photo`}
+            alt={t("clothing.altPhoto", { label })}
             loading="lazy"
             decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
           />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <span className="text-4xl">👕</span>
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-faint">
+            <ShirtIcon className="h-7 w-7" />
+            <span className="text-[11px]">{t("clothing.noPhotoLabel")}</span>
           </div>
         )}
 
@@ -47,66 +55,60 @@ export function ClothingCard({ item }: ClothingCardProps) {
         </div>
 
         {item.aiStatus === "failed" ? (
-          <div className="absolute inset-0 flex items-end justify-center bg-neutral-900/40 p-3">
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-black/50 to-transparent p-3">
+            <span className="sr-only">{t("ai.failed")}</span>
             <form action={retryItemFormAction.bind(null, item.id)}>
               <button
                 type="submit"
-                className="w-full rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 shadow hover:bg-neutral-100"
+                className="rounded-lg bg-surface px-3 py-1.5 text-xs font-medium text-ink shadow-sm transition-colors hover:bg-surface-muted"
               >
-                Re-analyze item
+                {t("clothing.reanalyze")}
               </button>
             </form>
           </div>
         ) : null}
       </div>
 
-      <div className="space-y-2 p-3">
+      <div className="space-y-1.5 p-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-neutral-900">
-              {analyzing ? "Analyzing item…" : label}
-            </p>
-            {!analyzing && item.subType ? (
-              <p className="truncate text-xs text-neutral-500">{capitalize(item.subType)}</p>
-            ) : null}
-          </div>
+          <p className="truncate text-sm font-medium text-ink">
+            {analyzing ? t("clothing.analyzingLabel") : categoryLabel}
+          </p>
           {!analyzing && item.brand ? (
-            <span className="shrink-0 text-xs text-neutral-400">{item.brand}</span>
+            <span className="shrink-0 text-[11px] text-muted">{item.brand}</span>
           ) : null}
         </div>
+        {!analyzing && item.subType ? (
+          <p className="truncate text-xs text-muted">{capitalize(item.subType)}</p>
+        ) : null}
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between pt-1">
           {item.colors.length > 0 ? (
-            <div className="flex items-center gap-1" aria-label="Colors">
+            <div className="flex items-center gap-1" aria-label={item.colors.map((c) => c.name).join(", ")}>
               {item.colors.slice(0, 4).map((color) => (
                 <span
                   key={`${color.name}-${color.hex}`}
                   title={color.name}
-                  className="h-3 w-3 rounded-full border border-neutral-200"
+                  className="h-3 w-3 rounded-full border border-line"
                   style={{ backgroundColor: color.hex }}
                 />
               ))}
               {item.colors.length > 4 ? (
-                <span className="text-[10px] text-neutral-400">+{item.colors.length - 4}</span>
+                <span className="text-[10px] text-faint">+{item.colors.length - 4}</span>
               ) : null}
             </div>
           ) : (
-            <span className="text-[11px] text-neutral-300">colors pending AI analysis</span>
+            <span className="text-[11px] text-faint">{t("clothing.noColors")}</span>
           )}
 
           <form action={archiveItemFormAction.bind(null, item.id)}>
             <button
               type="submit"
-              title="Remove from wardrobe"
-              className="rounded-md p-1 text-neutral-300 transition-colors hover:bg-error/10 hover:text-error"
+              title={t("clothing.archive")}
+              aria-label={t("clothing.archive")}
+              className="rounded-md p-1 text-faint transition-colors hover:bg-error-soft hover:text-error-ink"
             >
-              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path
-                  fillRule="evenodd"
-                  d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <TrashIcon className="h-4 w-4" />
             </button>
           </form>
         </div>

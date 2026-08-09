@@ -40,7 +40,7 @@ describe("AddClothingForm", () => {
     });
 
     const { container } = render(<AddClothingForm />);
-    expect(screen.getByText("Click to choose a photo")).toBeInTheDocument();
+    expect(screen.getByText("Choose a photo")).toBeInTheDocument();
 
     const input = container.querySelector('input[type="file"]')!;
     fireEvent.change(input, { target: { files: [fileFor()] } });
@@ -78,7 +78,7 @@ describe("AddClothingForm", () => {
       fireEvent.click(screen.getByText("Analyze and add"));
     });
     await waitFor(() => {
-      expect(screen.getByText(/AI analysis failed/)).toBeInTheDocument();
+      expect(screen.getByText(/couldn't analyze it yet/)).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText("Retry analysis"));

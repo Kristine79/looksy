@@ -2,26 +2,28 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function RecommendationsLoading() {
   return (
-    <div className="space-y-10">
+    <div className="space-y-12">
       <div className="space-y-2">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-4 w-80" />
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-80 max-w-full" />
       </div>
       <div className="space-y-4">
-        <Skeleton className="h-9 w-56" />
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6">
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+        <div className="rounded-2xl border border-line bg-surface p-6 sm:p-7">
+          <div className="flex items-start justify-between gap-3">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
             {Array.from({ length: 6 }).map((_, index) => (
-              <Skeleton key={index} className="aspect-[3/4]" />
+              <div key={index} className="space-y-2">
+                <Skeleton className="aspect-[3/4]" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
             ))}
           </div>
-          <Skeleton className="mt-4 h-16 w-full" />
-          <div className="mt-4 space-y-2">
-            <Skeleton className="h-3 w-40" />
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-8 w-full" />
-            ))}
-          </div>
+          <Skeleton className="mt-5 h-12 w-full" />
+          <Skeleton className="mt-5 h-24 w-full" />
         </div>
       </div>
     </div>

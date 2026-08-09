@@ -78,7 +78,7 @@ describe("FeedbackButtons", () => {
 
     fireEvent.click(screen.getByText("Change item"));
     await waitFor(() => {
-      expect(screen.getByText(/Swap an item and LOOKSY will rebuild the look/)).toBeInTheDocument();
+      expect(screen.getByText(/Swap an item and I'll rebuild the look/)).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText("Swap and rebuild look"));

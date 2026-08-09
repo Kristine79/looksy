@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "@/i18n/locale-provider";
+
 /**
  * Dashboard error boundary — keeps server-render failures (auth, DB) away
  * from the default Next.js error screen and never exposes technical details.
@@ -11,24 +13,18 @@ export default function DashboardError({
   error: Error;
   reset: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-neutral-300 bg-white px-6 py-16 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-error/10 text-2xl">
-        🛠️
-      </span>
-      <h2 className="text-base font-semibold text-neutral-800">
-        Something went wrong on this page
-      </h2>
-      <p className="max-w-sm text-sm text-neutral-500">
-        This usually means a temporary connection problem. Try again — your
-        wardrobe and looks are safe.
-      </p>
+    <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-line bg-surface px-6 py-16 text-center">
+      <h2 className="text-base font-medium text-ink">{t("error.title")}</h2>
+      <p className="max-w-sm text-sm leading-relaxed text-muted">{t("error.body")}</p>
       <button
         type="button"
         onClick={reset}
-        className="mt-2 rounded-lg bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-800"
+        className="mt-2 rounded-[8px] bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-interactive"
       >
-        Try again
+        {t("error.action")}
       </button>
     </div>
   );

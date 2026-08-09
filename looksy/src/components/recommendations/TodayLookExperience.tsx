@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useTranslation } from "@/i18n/locale-provider";
+import { ShirtIcon } from "@/components/ui/icons";
 
 export interface TodayLookExperienceProps {
   initialLook: TodayLookResult | null;
@@ -17,23 +19,25 @@ export interface TodayLookExperienceProps {
   swapCandidates?: LookItem[];
 }
 
+function occasionKey(value: string): string {
+  return `occasions.${value.toLowerCase()}`;
+}
+
 /**
  * The main product screen — generates, displays and refines Today's Look.
- * Server actions stay the only data path; this component only orchestrates
- * loading/error/empty states around them.
- *
- * Degraded state: when the AI provider was unavailable, the action returns a
- * deterministic fallback look with `degraded: true` + a non-technical message.
- * We show the outfit with a small notice banner — never a technical error.
+ * Server actions remain the only data path; this component only orchestrates
+ * loading/error/empty states around them, with a calm, editorial layout.
  */
 export function TodayLookExperience({
   initialLook,
   wardrobeCount,
   swapCandidates = [],
 }: TodayLookExperienceProps) {
+  const { t } = useTranslation();
   const [look, setLook] = useState<TodayLookResult | null>(initialLook);
-  const [degradedNotice, setDegradedNotice] = useState<string | null>(
-    initialLook?.degraded ? initialLook.message ?? null : null,
+  const [degraded, setDegraded] = useState<boolean>(initialLook?.degraded ?? false);
+  const [notice, setNotice] = useState<string | null>(
+    initialLook?.degraded ? (initialLook.message ?? null) : null
   );
   const [occasion, setOccasion] = useState<Occasion | "">("");
   const [generating, setGenerating] = useState(false);
@@ -43,20 +47,21 @@ export function TodayLookExperience({
     setGenerating(true);
     setError(null);
     try {
-      const result = await getTodayLookAction({
-        occasion: occasion || null,
-      });
+      const result = await getTodayLookAction({ occasion: occasion || null });
       if (result.error || !result.look) {
-        setError(result.message ?? "Could not generate a look right now");
-        setDegradedNotice(null);
+        setError(result.message ?? t("today.errorGenerate"));
+        setNotice(null);
+        setDegraded(false);
         return null;
       }
       setLook(result.look);
-      setDegradedNotice(result.degraded ? result.message ?? null : null);
+      setDegraded(result.degraded ?? false);
+      setNotice(result.degraded ? (result.message ?? null) : null);
       return result.look;
     } catch {
-      setError("We couldn't build a look right now. Please try again in a moment.");
-      setDegradedNotice(null);
+      setError(t("today.errorGenerate"));
+      setNotice(null);
+      setDegraded(false);
       return null;
     } finally {
       setGenerating(false);
@@ -64,117 +69,141 @@ export function TodayLookExperience({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <section>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-              Today&apos;s Look
+        <div className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <p className="overline overline-rule text-accent-text">{t("today.eyebrow")}</p>
+            <h1 className="mt-3 text-2xl font-medium tracking-tight text-ink sm:text-3xl">
+              {t("today.title")}
             </h1>
-            <p className="mt-1 text-sm text-neutral-500">
-              Built from <span className="font-semibold text-neutral-700">{wardrobeCount} items</span>{" "}
-              in your wardrobe — and everything LOOKSY has learned about you.
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
+              {t("today.builtFrom", { count: wardrobeCount })}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="hidden shrink-0 flex-col items-stretch gap-2 sm:flex">
             <label className="sr-only" htmlFor="occasion">
-              Occasion
+              {t("today.occasionLabel")}
             </label>
             <select
               id="occasion"
               value={occasion}
               onChange={(event) => setOccasion(event.target.value as Occasion)}
-              className="h-10 rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-800 focus:border-primary-500 focus:outline-none"
+              className="h-10 rounded-[8px] border border-line-strong bg-surface px-3 text-sm text-ink focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-interactive"
             >
-              <option value="">No occasion</option>
+              <option value="">{t("today.noOccasion")}</option>
               {OCCASIONS.map((value) => (
                 <option key={value} value={value}>
-                  {value.charAt(0).toUpperCase() + value.slice(1)}
+                  {t(occasionKey(value))}
                 </option>
               ))}
             </select>
             <Button type="button" onClick={runGenerate} loading={generating}>
-              {look ? "New look" : "Generate look"}
+              {look ? t("today.newLook") : t("today.generateLook")}
             </Button>
           </div>
         </div>
 
-        {generating ? (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-neutral-200 bg-white p-8">
-              <div className="flex flex-col items-center gap-4">
-                <Spinner className="h-8 w-8 text-primary-600" />
-                <div className="text-center">
-                  <p className="text-sm font-semibold text-neutral-800">
-                    LOOKSY is building your look…
-                  </p>
-                  <p className="mt-1 max-w-md text-xs text-neutral-500">
-                    Matching your wardrobe against your palette, wear history and saved
-                    outfits — then explaining every choice.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-6">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="aspect-[3/4]" />
-                ))}
-              </div>
+        <div className="mt-4 flex items-center gap-2 sm:hidden">
+          <label className="sr-only" htmlFor="occasion-mobile">
+            {t("today.occasionLabel")}
+          </label>
+          <select
+            id="occasion-mobile"
+            value={occasion}
+            onChange={(event) => setOccasion(event.target.value as Occasion)}
+            className="h-10 flex-1 rounded-[8px] border border-line-strong bg-surface px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-interactive"
+          >
+            <option value="">{t("today.noOccasion")}</option>
+            {OCCASIONS.map((value) => (
+              <option key={value} value={value}>
+                {t(occasionKey(value))}
+              </option>
+            ))}
+          </select>
+          <Button type="button" onClick={runGenerate} loading={generating}>
+            {look ? t("today.newLook") : t("today.generateLook")}
+          </Button>
+        </div>
+      </section>
+
+      {generating ? (
+        <div className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
+          <div className="flex items-center gap-4">
+            <Spinner className="h-5 w-5 text-accent" />
+            <div>
+              <p className="text-sm font-medium text-ink">{t("today.generating")}</p>
+              <p className="mt-0.5 max-w-md text-xs leading-relaxed text-muted">
+                {t("today.generatingHint")}
+              </p>
             </div>
           </div>
-        ) : error ? (
-          <div className="rounded-2xl border border-error/30 bg-error/5 p-8 text-center">
-            <p className="text-sm font-medium text-error">{error}</p>
-            <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={runGenerate}>
-              Try again
+          <div className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="aspect-[3/4]" />
+            ))}
+          </div>
+        </div>
+      ) : error ? (
+        <div className="rounded-2xl border border-error-line bg-error-soft/50 p-8 text-center">
+          <p className="text-sm font-medium text-error-ink">{error}</p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="mt-4"
+            onClick={runGenerate}
+          >
+            {t("common.tryAgain")}
+          </Button>
+        </div>
+      ) : look && look.items.length > 0 ? (
+        <div className="space-y-6">
+          {degraded && notice ? (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-xl border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning-ink"
+            >
+              <span aria-hidden="true" className="mt-0.5 text-base">
+                {notice}
+              </span>
+            </div>
+          ) : null}
+          <OutfitCard
+            look={look}
+            swapCandidates={swapCandidates}
+            onRegenerate={async () => {
+              const fresh = await runGenerate();
+              return fresh ?? look;
+            }}
+          />
+        </div>
+      ) : look ? (
+        <EmptyState
+          icon={<ShirtIcon className="h-5 w-5" />}
+          title={t("today.emptyTitle")}
+          description={t("today.emptyDescription")}
+          action={
+            <Button type="button" onClick={runGenerate} loading={generating}>
+              {t("today.firstLook")}
             </Button>
-          </div>
-        ) : look && look.items.length > 0 ? (
-          <div className="space-y-3">
-            {degradedNotice && (
-              <div
-                role="status"
-                className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-              >
-                <span aria-hidden="true" className="mt-0.5">⚠</span>
-                <span>{degradedNotice}</span>
-              </div>
-            )}
-            <OutfitCard
-              look={look}
-              swapCandidates={swapCandidates}
-              onRegenerate={async () => {
-                const fresh = await runGenerate();
-                return fresh ?? look;
-              }}
-            />
-          </div>
-        ) : look ? (
-          <EmptyState
-            title="Your wardrobe is empty"
-            description="Add a few items to your wardrobe and LOOKSY will start building looks that match your style."
-            action={
-              <Button type="button" onClick={runGenerate} loading={generating}>
-                Generate my first look
-              </Button>
-            }
-          />
-        ) : (
-          <EmptyState
-            title={wardrobeCount === 0 ? "Your wardrobe is empty" : "Ready when you are"}
-            description={
-              wardrobeCount === 0
-                ? "Add a few items to your wardrobe and LOOKSY will start building looks that match your style."
-                : "Choose an occasion and LOOKSY will build an outfit from your wardrobe — with real reasons for every choice."
-            }
-            action={
-              <Button type="button" onClick={runGenerate} loading={generating}>
-                Generate my first look
-              </Button>
-            }
-          />
-        )}
-      </section>
+          }
+        />
+      ) : (
+        <EmptyState
+          icon={<ShirtIcon className="h-5 w-5" />}
+          title={wardrobeCount === 0 ? t("today.emptyTitle") : t("today.readyTitle")}
+          description={
+            wardrobeCount === 0 ? t("today.emptyDescription") : t("today.readyDescription")
+          }
+          action={
+            <Button type="button" onClick={runGenerate} loading={generating}>
+              {t("today.firstLook")}
+            </Button>
+          }
+        />
+      )}
     </div>
   );
 }

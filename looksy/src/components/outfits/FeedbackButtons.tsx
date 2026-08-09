@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ComponentType, type SVGProps } from "react";
 import type { LookItem, TodayLookResult } from "@/modules/recommendations/server";
 import {
   changeItemAction,
@@ -10,33 +10,53 @@ import {
 } from "@/modules/outfits/actions";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
+import { useTranslation } from "@/i18n/locale-provider";
+import { HeartIcon, ShirtIcon, SwapIcon, XCircleIcon } from "@/components/ui/icons";
 
 export type FeedbackAction = "love" | "wore" | "change" | "skip";
 
 export interface FeedbackButtonsProps {
   look: TodayLookResult;
-  /** Called after the action is recorded so the parent can refresh UI state. */
   onRecorded?: (action: FeedbackAction) => void;
-  /** Called when a new look should be generated (skip / change item). */
   onRegenerate?: () => Promise<TodayLookResult>;
-  /** Wardrobe items available as swap-in candidates (excludes current look items). */
   swapCandidates?: LookItem[];
 }
 
-/**
- * Feedback Loop — four signals that teach LOOKSY:
- *
- * ❤️ Love        -> recordSave   (outfit marked as saved)
- * 👕 Wore it     -> recordWear   (wear log + wear counters)
- * 🔄 Change item -> recordSwap   (swap signal + regeneration)
- * 👎 Not for me  -> recordSkip   (dismissal + regeneration)
- */
+function ActionButton({
+  action: _action,
+  label,
+  Icon,
+  disabled,
+  pending,
+  onClick,
+}: {
+  action: FeedbackAction;
+  label: string;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+  disabled: boolean;
+  pending: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex flex-1 flex-col items-center gap-1.5 rounded-xl border border-line bg-surface px-2 py-3 text-xs font-medium text-muted transition-colors hover:border-accent-soft-line hover:bg-accent-soft/50 disabled:opacity-50"
+    >
+      {pending ? <Spinner className="h-4 w-4 text-accent" /> : <Icon className="h-5 w-5 text-muted" />}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export function FeedbackButtons({
   look,
   onRecorded,
   onRegenerate,
   swapCandidates = [],
 }: FeedbackButtonsProps) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState<FeedbackAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [swapping, setSwapping] = useState(false);
@@ -55,7 +75,7 @@ export function FeedbackButtons({
         await onRegenerate();
       }
     } catch {
-      setNotice("Something went wrong — please try again.");
+      setNotice(t("feedback.error"));
     } finally {
       setBusy(null);
     }
@@ -64,27 +84,15 @@ export function FeedbackButtons({
   function noticeFor(action: FeedbackAction): string {
     switch (action) {
       case "love":
-        return "Saved — this look goes into your favorites.";
+        return t("feedback.loveNotice");
       case "wore":
-        return "Noted — I'll use this when planning future looks.";
+        return t("feedback.woreNotice");
       case "change":
-        return "Swap recorded.";
+        return t("feedback.changeNotice");
       case "skip":
-        return "Understood — this wasn't for you.";
+        return t("feedback.skipNotice");
     }
   }
-
-  const actionButton = (action: FeedbackAction, label: string, emoji: string) => (
-    <button
-      type="button"
-      disabled={busy !== null}
-      onClick={() => run(action, () => handlers[action]())}
-      className="flex flex-1 flex-col items-center gap-1 rounded-xl border border-neutral-200 bg-white px-2 py-3 text-xs font-medium text-neutral-700 transition-colors hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
-    >
-      {busy === action ? <Spinner className="h-4 w-4" /> : <span className="text-base">{emoji}</span>}
-      {label}
-    </button>
-  );
 
   const handlers: Record<FeedbackAction, () => Promise<unknown>> = {
     love: () => loveOutfitAction(look.outfitId),
@@ -94,65 +102,93 @@ export function FeedbackButtons({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="overline text-accent-text">{t("feedback.title")}</span>
+        <span className="text-sm text-muted">{t("feedback.helper")}</span>
+      </div>
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {actionButton("love", "Love", "❤️")}
-        {actionButton("wore", "Wore it", "👕")}
+        <ActionButton
+          action="love"
+          label={t("feedback.love")}
+          Icon={HeartIcon}
+          disabled={busy !== null}
+          pending={busy === "love"}
+          onClick={() => run("love", handlers.love)}
+        />
+        <ActionButton
+          action="wore"
+          label={t("feedback.wore")}
+          Icon={ShirtIcon}
+          disabled={busy !== null}
+          pending={busy === "wore"}
+          onClick={() => run("wore", handlers.wore)}
+        />
         <button
           type="button"
           disabled={busy !== null}
           onClick={() => setSwapping((v) => !v)}
-          className="flex flex-1 flex-col items-center gap-1 rounded-xl border border-neutral-200 bg-white px-2 py-3 text-xs font-medium text-neutral-700 transition-colors hover:border-primary-300 hover:bg-primary-50 disabled:opacity-50"
+          className="flex flex-1 flex-col items-center gap-1.5 rounded-xl border border-line bg-surface px-2 py-3 text-xs font-medium text-muted transition-colors hover:border-accent-soft-line hover:bg-accent-soft/50 disabled:opacity-50"
         >
           {busy === "change" ? (
-            <Spinner className="h-4 w-4" />
+            <Spinner className="h-4 w-4 text-accent" />
           ) : (
-            <span className="text-base" aria-hidden="true">
-              🔄
-            </span>
+            <SwapIcon className="h-5 w-5 text-muted" />
           )}
-          Change item
+          <span>{t("feedback.change")}</span>
         </button>
-        {actionButton("skip", "Not for me", "👎")}
+        <ActionButton
+          action="skip"
+          label={t("feedback.skip")}
+          Icon={XCircleIcon}
+          disabled={busy !== null}
+          pending={busy === "skip"}
+          onClick={() => run("skip", handlers.skip)}
+        />
       </div>
 
       {swapping ? (
-        <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
-          <p className="mb-2 text-xs font-medium text-neutral-700">
-            Swap an item and LOOKSY will rebuild the look
-          </p>
-          <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <p className="mb-3 text-sm font-medium text-ink">{t("feedback.swapTitle")}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-[11px] text-neutral-500">Replace…</span>
+              <span className="mb-1 block text-[11px] text-faint">{t("feedback.replaceLabel")}</span>
               <select
                 value={swapOut}
                 onChange={(event) => setSwapOut(event.target.value)}
-                className="h-9 w-full rounded-lg border border-neutral-300 bg-white px-2 text-xs text-neutral-800"
+                className="h-9 w-full rounded-[8px] border border-line-strong bg-surface px-2 text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-interactive"
               >
-                {look.items.map((entry) => (
-                  <option key={entry.item.id} value={entry.item.id}>
-                    {entry.item.type}
-                    {entry.item.subType ? ` · ${entry.item.subType}` : ""}
-                  </option>
-                ))}
+                {look.items.map((entry) => {
+                  const cat = t(`categories.${entry.item.type.toLowerCase()}`);
+                  return (
+                    <option key={entry.item.id} value={entry.item.id}>
+                      {cat ? cat : entry.item.type.charAt(0).toUpperCase() + entry.item.type.slice(1)}
+                      {entry.item.subType ? ` · ${entry.item.subType.charAt(0).toUpperCase() + entry.item.subType.slice(1)}` : ""}
+                    </option>
+                  );
+                })}
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-[11px] text-neutral-500">…with</span>
+              <span className="mb-1 block text-[11px] text-faint">{t("feedback.withLabel")}</span>
               <select
                 value={swapIn}
                 onChange={(event) => setSwapIn(event.target.value)}
-                className="h-9 w-full rounded-lg border border-neutral-300 bg-white px-2 text-xs text-neutral-800"
+                className="h-9 w-full rounded-[8px] border border-line-strong bg-surface px-2 text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-interactive"
               >
                 {swapCandidates.length === 0 ? (
-                  <option value="">No other items yet</option>
+                  <option value="">{t("feedback.noneYet")}</option>
                 ) : null}
-                {swapCandidates.map((entry) => (
-                  <option key={entry.item.id} value={entry.item.id}>
-                    {entry.item.type}
-                    {entry.item.subType ? ` · ${entry.item.subType}` : ""}
-                  </option>
-                ))}
+                {swapCandidates.map((entry) => {
+                  const cat = t(`categories.${entry.item.type.toLowerCase()}`);
+                  return (
+                    <option key={entry.item.id} value={entry.item.id}>
+                      {cat ? cat : entry.item.type.charAt(0).toUpperCase() + entry.item.type.slice(1)}
+                      {entry.item.subType ? ` · ${entry.item.subType.charAt(0).toUpperCase() + entry.item.subType.slice(1)}` : ""}
+                    </option>
+                  );
+                })}
               </select>
             </label>
           </div>
@@ -167,13 +203,13 @@ export function FeedbackButtons({
               run("change", handlers.change);
             }}
           >
-            Swap and rebuild look
+            {t("feedback.runSwap")}
           </Button>
         </div>
       ) : null}
 
       {notice ? (
-        <p className="text-center text-xs font-medium text-primary-700" role="status">
+        <p className="text-center text-sm font-medium text-accent-soft-ink" role="status">
           {notice}
         </p>
       ) : null}

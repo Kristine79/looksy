@@ -25,10 +25,10 @@ export default async function DashboardLayout({
   const demoUser = await isDemoIdentity(userId);
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="flex min-h-screen flex-col bg-page">
       <DashboardNav />
       {demoUser ? <DemoModeBanner /> : null}
-      <main className="mx-auto w-full max-w-5xl px-4 py-8">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         {showOnboarding ? <OnboardingBanner hasItems={hasItems} /> : null}
         {showOnboarding ? <div className="h-8" aria-hidden="true" /> : null}
         {children}

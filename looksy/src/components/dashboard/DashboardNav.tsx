@@ -2,40 +2,71 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslation } from "@/i18n/locale-provider";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { LocaleSwitcher } from "@/components/theme/LocaleSwitcher";
 
 const LINKS = [
-  { href: "/dashboard/recommendations", label: "Today's Look" },
-  { href: "/dashboard/wardrobe", label: "Wardrobe" },
-];
+  { href: "/dashboard/recommendations", key: "nav.todaysLook" },
+  { href: "/dashboard/wardrobe", key: "nav.wardrobe" },
+] as const;
 
+/**
+ * Premium, minimal header: brand wordmark, primary nav with an accent underline
+ * for the active page, and quiet language + theme controls.
+ */
 export function DashboardNav() {
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   return (
-    <header className="sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50/90 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
-        <Link href="/dashboard/recommendations" className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-700 text-sm text-white">
-            L
-          </span>
-          <span className="text-sm font-bold tracking-tight text-neutral-900">LOOKSY</span>
-        </Link>
+    <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur-sm">
+      <div className="mx-auto flex w-full max-w-5xl flex-col px-4 sm:px-6">
+        <div className="flex h-14 items-center justify-between gap-3">
+          <Link
+            href="/dashboard/recommendations"
+            className="flex items-center gap-2.5"
+            aria-label={t("nav.brand")}
+          >
+            <span
+              className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-accent text-accent-ink"
+              aria-hidden="true"
+            >
+              <span className="font-serif text-sm font-semibold tracking-tight">L</span>
+            </span>
+            <span className="text-sm font-semibold tracking-[0.22em] text-ink">
+              {t("nav.brand")}
+            </span>
+          </Link>
 
-        <nav className="flex items-center gap-1" aria-label="Dashboard">
+          <div className="flex items-center gap-2">
+            <LocaleSwitcher />
+            <span className="hidden h-5 w-px bg-line sm:block" aria-hidden="true" />
+            <ThemeToggle />
+          </div>
+        </div>
+
+        <nav className="-mb-px flex items-center gap-0 sm:gap-1" aria-label={t("nav.navLabel")}>
           {LINKS.map((link) => {
             const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-primary-700 text-white"
-                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
-                }`}
                 aria-current={active ? "page" : undefined}
+                className={`relative flex h-10 items-center px-3 sm:px-4 text-sm transition-colors ${
+                  active
+                    ? "font-medium text-accent-soft-ink"
+                    : "text-muted hover:text-ink"
+                }`}
               >
-                {link.label}
+                {t(link.key)}
+                <span
+                  aria-hidden="true"
+                  className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-accent transition-opacity ${
+                    active ? "opacity-100" : "opacity-0"
+                  }`}
+                />
               </Link>
             );
           })}

@@ -6,35 +6,20 @@ import { completeOnboardingAction } from "@/modules/users/actions";
 import { loadDemoWardrobeAction } from "@/modules/demo/actions";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
+import { useTranslation } from "@/i18n/locale-provider";
+import { CameraIcon, SparkleIcon, ShirtIcon } from "@/components/ui/icons";
 
 export interface OnboardingBannerProps {
   hasItems: boolean;
 }
 
-const STEPS = [
-  {
-    emoji: "📸",
-    title: "Add your clothes",
-    text: "Take a photo of any piece — LOOKSY recognizes type, colors, material and style.",
-  },
-  {
-    emoji: "✨",
-    title: "LOOKSY analyzes them",
-    text: "Every item gets AI metadata and joins your digital wardrobe.",
-  },
-  {
-    emoji: "🧠",
-    title: "Recommendations improve over time",
-    text: "The more you wear, save and review looks, the better LOOKSY knows you.",
-  },
-];
-
 /**
- * First-time welcome state — helps a new user understand LOOKSY within a
- * minute. Offers a one-click demo wardrobe when the account is empty.
+ * First-time welcome state — introduces LOOKSY within a minute and offers a
+ * one-click sample wardrobe. Editorial and calm, not a feature dump.
  */
 export function OnboardingBanner({ hasItems }: OnboardingBannerProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [loadingDemo, setLoadingDemo] = useState(false);
   const [demoLoaded, setDemoLoaded] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -55,7 +40,7 @@ export function OnboardingBanner({ hasItems }: OnboardingBannerProps) {
       }
       router.refresh();
     } catch {
-      setError("Couldn't load the demo wardrobe right now. You can try again.");
+      setError(t("onboarding.errDemo"));
     } finally {
       setLoadingDemo(false);
     }
@@ -70,34 +55,32 @@ export function OnboardingBanner({ hasItems }: OnboardingBannerProps) {
     setDismissed(true);
   }
 
+  const steps = [
+    { Icon: CameraIcon, title: t("onboarding.step1Title"), text: t("onboarding.step1Text") },
+    { Icon: SparkleIcon, title: t("onboarding.step2Title"), text: t("onboarding.step2Text") },
+    { Icon: ShirtIcon, title: t("onboarding.step3Title"), text: t("onboarding.step3Text") },
+  ];
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-primary-200 bg-gradient-to-br from-primary-50 to-white">
+    <section className="overflow-hidden rounded-2xl border border-line bg-surface">
       <div className="flex flex-col gap-6 p-6 sm:p-8">
         <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-600">
-            Welcome
-          </p>
-          <h2 className="text-xl font-bold tracking-tight text-neutral-900">
-            LOOKSY — Your AI stylist that learns your personal style.
+          <p className="overline overline-rule text-accent-text">{t("onboarding.welcome")}</p>
+          <h2 className="text-xl font-medium tracking-tight text-ink">
+            {t("onboarding.title")}
           </h2>
-          <p className="max-w-xl text-sm text-neutral-600">
-            Build a digital wardrobe from your photos. LOOKSY understands every
-            piece and explains why it picks each look — grounded in your real
-            clothes, not generic advice.
-          </p>
+          <p className="max-w-xl text-sm leading-relaxed text-muted">{t("onboarding.body")}</p>
         </div>
 
         <ol className="grid gap-3 sm:grid-cols-3">
-          {STEPS.map((step) => (
+          {steps.map((step) => (
             <li
               key={step.title}
-              className="rounded-xl border border-primary-100 bg-white/70 p-4"
+              className="rounded-xl border border-line bg-surface-muted/50 p-4"
             >
-              <span className="text-xl" aria-hidden="true">
-                {step.emoji}
-              </span>
-              <p className="mt-2 text-sm font-semibold text-neutral-800">{step.title}</p>
-              <p className="mt-1 text-xs leading-relaxed text-neutral-500">{step.text}</p>
+              <step.Icon className="h-5 w-5 text-accent-soft-ink" />
+              <p className="mt-2.5 text-sm font-medium text-ink">{step.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">{step.text}</p>
             </li>
           ))}
         </ol>
@@ -105,22 +88,22 @@ export function OnboardingBanner({ hasItems }: OnboardingBannerProps) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {!hasItems && !demoLoaded ? (
             <Button type="button" onClick={handleLoadDemo} loading={loadingDemo}>
-              {loadingDemo ? "Loading sample wardrobe…" : "Explore with a sample wardrobe"}
+              {loadingDemo ? t("onboarding.loadingDemo") : t("onboarding.loadDemo")}
             </Button>
           ) : null}
           {demoLoaded ? (
-            <p className="text-sm font-medium text-success" role="status">
-              Sample wardrobe loaded — check Wardrobe and Today&apos;s Look.
+            <p className="text-sm font-medium text-success-ink" role="status">
+              {t("onboarding.demoLoaded")}
             </p>
           ) : null}
           <Button type="button" variant="secondary" onClick={handleStart}>
-            {hasItems || demoLoaded ? "Got it" : "Start from scratch"}
+            {hasItems || demoLoaded ? t("onboarding.gotIt") : t("onboarding.startScratch")}
           </Button>
-          {loadingDemo ? <Spinner className="h-4 w-4 text-primary-600" /> : null}
+          {loadingDemo ? <Spinner className="h-4 w-4 text-accent" /> : null}
         </div>
 
         {error ? (
-          <p className="text-xs font-medium text-error" role="alert">
+          <p className="text-xs font-medium text-error-ink" role="alert">
             {error}
           </p>
         ) : null}

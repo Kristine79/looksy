@@ -11,13 +11,13 @@ export interface ButtonProps
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary-700 text-white hover:bg-primary-600 active:bg-primary-800 disabled:bg-primary-300",
+    "bg-accent text-accent-ink hover:bg-accent-interactive active:bg-accent-strong disabled:opacity-45",
   secondary:
-    "bg-white text-neutral-800 border border-neutral-300 hover:bg-neutral-100 active:bg-neutral-200 disabled:opacity-50",
+    "bg-surface text-ink border border-line-strong hover:border-accent-soft-line hover:bg-surface-muted active:bg-surface-muted disabled:opacity-45",
   ghost:
-    "bg-transparent text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50",
+    "bg-transparent text-muted hover:bg-surface-muted hover:text-ink active:text-ink disabled:opacity-45",
   danger:
-    "bg-white text-error border border-error/40 hover:bg-error/10 disabled:opacity-50",
+    "bg-surface text-error-ink border border-error-line hover:bg-error-soft disabled:opacity-45",
 };
 
 const sizeClasses = {
@@ -36,11 +36,11 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 disabled:cursor-not-allowed ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-[8px] font-medium transition-colors duration-150 disabled:cursor-not-allowed ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       disabled={disabled || loading}
       {...rest}
     >
-      {loading ? <Spinner className="h-4 w-4" /> : null}
+      {loading ? <Spinner className="h-4 w-4 shrink-0" /> : null}
       {children}
     </button>
   );

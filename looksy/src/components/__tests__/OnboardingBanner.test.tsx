@@ -29,11 +29,11 @@ describe("OnboardingBanner", () => {
     render(<OnboardingBanner hasItems={false} />);
 
     expect(
-      screen.getByText("LOOKSY — Your AI stylist that learns your personal style.")
+      screen.getByText("Your personal stylist, learning your style.")
     ).toBeInTheDocument();
     expect(screen.getByText("Add your clothes")).toBeInTheDocument();
-    expect(screen.getByText("LOOKSY analyzes them")).toBeInTheDocument();
-    expect(screen.getByText("Recommendations improve over time")).toBeInTheDocument();
+    expect(screen.getByText("I analyze them")).toBeInTheDocument();
+    expect(screen.getByText("Looks improve over time")).toBeInTheDocument();
   });
 
   it("offers a demo wardrobe for an empty account", () => {
@@ -60,7 +60,7 @@ describe("OnboardingBanner", () => {
     });
     await waitFor(() => {
       expect(
-        screen.getByText("Sample wardrobe loaded — check Wardrobe and Today's Look.")
+        screen.getByText("Sample wardrobe loaded. Check Wardrobe and Today's Look.")
       ).toBeInTheDocument();
     });
     expect(refreshMock).toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe("OnboardingBanner", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("Couldn't load the demo wardrobe right now. You can try again.")
+        screen.getByText("Couldn't load the sample wardrobe right now. You can try again.")
       ).toBeInTheDocument();
     });
   });
@@ -90,7 +90,7 @@ describe("OnboardingBanner", () => {
     });
     await waitFor(() => {
       expect(
-        screen.queryByText("LOOKSY — Your AI stylist that learns your personal style.")
+        screen.queryByText("Your personal stylist, learning your style.")
       ).not.toBeInTheDocument();
     });
   });

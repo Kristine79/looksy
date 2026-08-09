@@ -8,16 +8,21 @@ import {
   getStyleMemories,
 } from "@/modules/recommendations/server";
 import type { LookItem } from "@/modules/recommendations/server";
+import { translate } from "@/i18n";
+import { getLocale } from "@/i18n/server";
 import { TodayLookExperience } from "@/components/recommendations/TodayLookExperience";
 import { MemoryCard } from "@/components/memory/MemoryCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 
-export const metadata: Metadata = {
-  title: "Today's Look — LOOKSY",
-  description: "Personal style intelligence that explains every choice",
-};
-
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return {
+    title: `${translate(locale, "today.title")} — LOOKSY`,
+    description: translate(locale, "meta.recommendationsDescription"),
+  };
+}
 
 function toLookItem(item: WardrobeItemWithPhotos): LookItem {
   return {
@@ -32,6 +37,7 @@ function toLookItem(item: WardrobeItemWithPhotos): LookItem {
 
 export default async function RecommendationsPage() {
   const userId = await getCurrentUserId();
+  const locale = await getLocale();
 
   const [latestLook, memories, wardrobe] = await Promise.all([
     getLatestLook(userId),
@@ -48,21 +54,19 @@ export default async function RecommendationsPage() {
     .map(toLookItem);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-12">
       <TodayLookExperience
         initialLook={initialLook}
         wardrobeCount={wardrobe.length}
         swapCandidates={swapCandidates}
       />
 
-      <section>
+      <section aria-labelledby="memory-heading">
         <div className="mb-4">
-          <h2 className="text-lg font-bold tracking-tight text-neutral-900">
-            What LOOKSY has learned about you
+          <h2 id="memory-heading" className="text-lg font-medium tracking-tight text-ink">
+            {translate(locale, "memory.title")}
           </h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Fashion Memory — verified patterns from your wardrobe, wear history and feedback.
-          </p>
+          <p className="mt-1 text-sm text-muted">{translate(locale, "memory.subtitle")}</p>
         </div>
 
         {memories.length > 0 ? (
@@ -73,43 +77,10 @@ export default async function RecommendationsPage() {
           </div>
         ) : (
           <EmptyState
-            title="No memories yet"
-            description="Give feedback on looks and add items — LOOKSY will start learning your style."
+            title={translate(locale, "memory.emptyTitle")}
+            description={translate(locale, "memory.emptyDescription")}
           />
         )}
-      </section>
-
-      <section className="rounded-2xl border border-primary-100 bg-primary-50 p-5">
-        <h2 className="text-sm font-semibold text-primary-900">How LOOKSY works</h2>
-        <ol className="mt-3 grid gap-4 text-sm text-neutral-700 sm:grid-cols-3">
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-700 text-xs font-bold text-white">
-              1
-            </span>
-            <span>
-              <strong className="font-semibold">Add items</strong> — LOOKSY analyzes every piece
-              with computer vision.
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-700 text-xs font-bold text-white">
-              2
-            </span>
-            <span>
-              <strong className="font-semibold">Get looks</strong> — recommendations are grounded
-              in your wardrobe, palette and history.
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-700 text-xs font-bold text-white">
-              3
-            </span>
-            <span>
-              <strong className="font-semibold">Teach LOOKSY</strong> — every reaction refines
-              your Fashion Memory.
-            </span>
-          </li>
-        </ol>
       </section>
     </div>
   );

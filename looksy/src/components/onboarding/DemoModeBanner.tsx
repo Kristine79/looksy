@@ -1,19 +1,24 @@
+"use client";
+
+import { useTranslation } from "@/i18n/locale-provider";
+
 /**
  * Demo-mode notice — shown when the active account is the seeded demo user.
- * Clearly marks sample data so a demo never looks like real user progress.
+ * Presented as a normal product state, never a debug banner.
  */
 export function DemoModeBanner() {
+  const { t } = useTranslation();
+
   return (
-    <div
-      role="status"
-      className="border-b border-primary-100 bg-primary-50/80"
-    >
-      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-2 text-xs text-primary-800">
-        <span aria-hidden="true">🛍️</span>
+    <div role="status" className="border-b border-line bg-surface-muted/60">
+      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-2 text-xs text-muted sm:px-6">
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
         <span>
-          Demo mode — you are browsing a sample wardrobe. Add your own photos
-          anytime or run <code className="rounded bg-white/70 px-1 font-mono text-[11px]">npm run db:seed</code>{" "}
-          to refresh it.
+          <strong className="font-medium text-ink-2">{t("demo.title")}</strong>
+          <span className="mx-1.5 text-faint" aria-hidden="true">
+            ·
+          </span>
+          {t("demo.body")}
         </span>
       </div>
     </div>

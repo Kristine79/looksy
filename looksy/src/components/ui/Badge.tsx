@@ -4,17 +4,15 @@ export type BadgeTone =
   | "success"
   | "warning"
   | "error"
-  | "info"
-  | "tertiary";
+  | "info";
 
 const toneClasses: Record<BadgeTone, string> = {
-  neutral: "bg-neutral-100 text-neutral-700 border-neutral-200",
-  primary: "bg-primary-100 text-primary-800 border-primary-200",
-  success: "bg-success/10 text-success border-success/30",
-  warning: "bg-warning/10 text-warning border-warning/30",
-  error: "bg-error/10 text-error border-error/30",
-  info: "bg-info/10 text-info border-info/30",
-  tertiary: "bg-tertiary-100 text-tertiary-800 border-tertiary-200",
+  neutral: "bg-surface-muted text-muted border-line",
+  primary: "bg-accent-soft text-accent-soft-ink border-accent-soft-line",
+  success: "bg-success-soft text-success-ink border-success-line",
+  warning: "bg-warning-soft text-warning-ink border-warning-line",
+  error: "bg-error-soft text-error-ink border-error-line",
+  info: "bg-info-soft text-info-ink border-info-line",
 };
 
 export interface BadgeProps {

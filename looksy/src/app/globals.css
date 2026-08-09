@@ -1,112 +1,227 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ============================================================
+   LOOKSY — design tokens
+   Editorial fashion / quiet luxury product interface.
+   Semantic variables flip under the .dark class.
+   ============================================================ */
+
 :root {
-  --color-neutral-50: #fafaf8;
-  --color-neutral-100: #f5f5f0;
-  --color-neutral-200: #e8e8e3;
-  --color-neutral-300: #d4d4cf;
-  --color-neutral-400: #a3a39e;
-  --color-neutral-500: #73736e;
-  --color-neutral-600: #52524e;
-  --color-neutral-700: #40403c;
-  --color-neutral-800: #262624;
-  --color-neutral-900: #171715;
+  /* Surfaces — warm neutrals */
+  --color-page: #faf9f6;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4f2ed;
+  --color-surface-raised: #ffffff;
+  --color-overlay: rgba(27, 25, 23, 0.45);
 
-  --color-primary-50: #f0f5f1;
-  --color-primary-100: #d9e8db;
-  --color-primary-200: #b3d1b7;
-  --color-primary-300: #8dba93;
-  --color-primary-400: #67a36f;
-  --color-primary-500: #4a8b53;
-  --color-primary-600: #3a6f42;
-  --color-primary-700: #2a5331;
-  --color-primary-800: #1a3720;
-  --color-primary-900: #0a1b10;
+  /* Ink — warm near-black typography */
+  --color-ink: #1b1917;
+  --color-ink-2: #45403a;
+  --color-muted: #77726f;
+  --color-faint: #7a7672;
 
-  --color-secondary-50: #fbf9f5;
-  --color-secondary-100: #f5f0e6;
-  --color-secondary-200: #ebe1cd;
-  --color-secondary-300: #e1d2b4;
-  --color-secondary-400: #d7c39b;
-  --color-secondary-500: #cdb482;
-  --color-secondary-600: #b89a68;
-  --color-secondary-700: #9a7d4e;
-  --color-secondary-800: #7c6134;
-  --color-secondary-900: #5e451a;
+  /* Hairlines */
+  --color-line: #eae6df;
+  --color-line-strong: #d9d3c9;
 
-  --color-tertiary-50: #fdf5f7;
-  --color-tertiary-100: #f9e5eb;
-  --color-tertiary-200: #f3cbd7;
-  --color-tertiary-300: #edb1c3;
-  --color-tertiary-400: #e797af;
-  --color-tertiary-500: #e17d9b;
-  --color-tertiary-600: #c9637f;
-  --color-tertiary-700: #a94963;
-  --color-tertiary-800: #892f47;
-  --color-tertiary-900: #69152b;
+  /* Accent — deep oxblood */
+  --color-accent: #6b2638;
+  --color-accent-interactive: #7a3045;
+  --color-accent-text: #6b2638;
+  --color-accent-strong: #5a1f2f;
+  --color-accent-ink: #fbf7f4;
+  --color-accent-soft: #f5eaed;
+  --color-accent-soft-line: #e9d5db;
+  --color-accent-soft-ink: #571f2d;
 
-  --color-success: #5a8a6a;
-  --color-warning: #c49a2a;
-  --color-error: #b85450;
-  --color-info: #5a7a9a;
+  /* States — warm, muted, accessible */
+  --color-success: #3c6849;
+  --color-success-ink: #3c6849;
+  --color-success-soft: #eaf2ec;
+  --color-success-line: #cfe0d4;
+
+  --color-warning: #7e6119;
+  --color-warning-ink: #7e6119;
+  --color-warning-soft: #f7f0db;
+  --color-warning-line: #eadfb2;
+
+  --color-error: #a2443a;
+  --color-error-ink: #a2443a;
+  --color-error-soft: #f6e9e6;
+  --color-error-line: #ecd1cb;
+
+  --color-info: #3d5a7a;
+  --color-info-ink: #3d5a7a;
+  --color-info-soft: #eaeff5;
+  --color-info-line: #d2dde9;
+}
+
+.dark {
+  --color-page: #16130f;
+  --color-surface: #1e1a17;
+  --color-surface-muted: #26211d;
+  --color-surface-raised: #231f1b;
+  --color-overlay: rgba(10, 8, 6, 0.6);
+
+  --color-ink: #f1ece5;
+  --color-ink-2: #c9c2b7;
+  --color-muted: #9c9387;
+  --color-faint: #96908c;
+
+  --color-line: #322c26;
+  --color-line-strong: #453e36;
+
+  --color-accent: #7a3a4c;
+  --color-accent-interactive: #ad6a7d;
+  --color-accent-text: #dca7b3;
+  --color-accent-strong: #6b2e3e;
+  --color-accent-ink: #f6efea;
+  --color-accent-soft: #2a1d22;
+  --color-accent-soft-line: #3d2a30;
+  --color-accent-soft-ink: #dca7b3;
+
+  --color-success: #7fb595;
+  --color-success-ink: #7fb595;
+  --color-success-soft: #222d26;
+  --color-success-line: #334437;
+
+  --color-warning: #d4b15c;
+  --color-warning-ink: #d4b15c;
+  --color-warning-soft: #383020;
+  --color-warning-line: #4d4227;
+
+  --color-error: #e08a7d;
+  --color-error-ink: #e08a7d;
+  --color-error-soft: #3b2723;
+  --color-error-line: #54332d;
+
+  --color-info: #8fb1d1;
+  --color-info-ink: #8fb1d1;
+  --color-info-soft: #222e3a;
+  --color-info-line: #35424f;
 }
 
 @theme inline {
-  --color-neutral-50: var(--color-neutral-50);
-  --color-neutral-100: var(--color-neutral-100);
-  --color-neutral-200: var(--color-neutral-200);
-  --color-neutral-300: var(--color-neutral-300);
-  --color-neutral-400: var(--color-neutral-400);
-  --color-neutral-500: var(--color-neutral-500);
-  --color-neutral-600: var(--color-neutral-600);
-  --color-neutral-700: var(--color-neutral-700);
-  --color-neutral-800: var(--color-neutral-800);
-  --color-neutral-900: var(--color-neutral-900);
+  --color-page: var(--color-page);
+  --color-surface: var(--color-surface);
+  --color-surface-muted: var(--color-surface-muted);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-overlay: var(--color-overlay);
 
-  --color-primary-50: var(--color-primary-50);
-  --color-primary-100: var(--color-primary-100);
-  --color-primary-200: var(--color-primary-200);
-  --color-primary-300: var(--color-primary-300);
-  --color-primary-400: var(--color-primary-400);
-  --color-primary-500: var(--color-primary-500);
-  --color-primary-600: var(--color-primary-600);
-  --color-primary-700: var(--color-primary-700);
-  --color-primary-800: var(--color-primary-800);
-  --color-primary-900: var(--color-primary-900);
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-muted: var(--color-muted);
+  --color-faint: var(--color-faint);
 
-  --color-secondary-50: var(--color-secondary-50);
-  --color-secondary-100: var(--color-secondary-100);
-  --color-secondary-200: var(--color-secondary-200);
-  --color-secondary-300: var(--color-secondary-300);
-  --color-secondary-400: var(--color-secondary-400);
-  --color-secondary-500: var(--color-secondary-500);
-  --color-secondary-600: var(--color-secondary-600);
-  --color-secondary-700: var(--color-secondary-700);
-  --color-secondary-800: var(--color-secondary-800);
-  --color-secondary-900: var(--color-secondary-900);
+  --color-line: var(--color-line);
+  --color-line-strong: var(--color-line-strong);
 
-  --color-tertiary-50: var(--color-tertiary-50);
-  --color-tertiary-100: var(--color-tertiary-100);
-  --color-tertiary-200: var(--color-tertiary-200);
-  --color-tertiary-300: var(--color-tertiary-300);
-  --color-tertiary-400: var(--color-tertiary-400);
-  --color-tertiary-500: var(--color-tertiary-500);
-  --color-tertiary-600: var(--color-tertiary-600);
-  --color-tertiary-700: var(--color-tertiary-700);
-  --color-tertiary-800: var(--color-tertiary-800);
-  --color-tertiary-900: var(--color-tertiary-900);
+  --color-accent: var(--color-accent);
+  --color-accent-interactive: var(--color-accent-interactive);
+  --color-accent-text: var(--color-accent-text);
+  --color-accent-strong: var(--color-accent-strong);
+  --color-accent-ink: var(--color-accent-ink);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-accent-soft-line: var(--color-accent-soft-line);
+  --color-accent-soft-ink: var(--color-accent-soft-ink);
 
   --color-success: var(--color-success);
-  --color-warning: var(--color-warning);
-  --color-error: var(--color-error);
-  --color-info: var(--color-info);
+  --color-success-ink: var(--color-success-ink);
+  --color-success-soft: var(--color-success-soft);
+  --color-success-line: var(--color-success-line);
 
-  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --color-warning: var(--color-warning);
+  --color-warning-ink: var(--color-warning-ink);
+  --color-warning-soft: var(--color-warning-soft);
+  --color-warning-line: var(--color-warning-line);
+
+  --color-error: var(--color-error);
+  --color-error-ink: var(--color-error-ink);
+  --color-error-soft: var(--color-error-soft);
+  --color-error-line: var(--color-error-line);
+
+  --color-info: var(--color-info);
+  --color-info-ink: var(--color-info-ink);
+  --color-info-soft: var(--color-info-soft);
+  --color-info-line: var(--color-info-line);
+
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  color: var(--color-neutral-800);
-  background: var(--color-neutral-50);
+  color: var(--color-ink);
+  background: var(--color-page);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-soft-ink);
+}
+
+/* Accessible focus — used everywhere, never removed */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent-interactive);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Quietly scrollable filter rows on small screens */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
+   Editorial typography helpers
+   ============================================================ */
+
+@layer utilities {
+  .overline {
+    font-size: 0.6875rem; /* 11px */
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .overline-rule {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .overline-rule::before {
+    content: "";
+    width: 1.5rem;
+    height: 1px;
+    background: var(--color-accent);
+  }
+}
+
+/* ============================================================
+   Motion — subtle, purposeful, fast; reduced-motion respected
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
