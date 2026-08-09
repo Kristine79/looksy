@@ -12,14 +12,31 @@ import type { AnalysisOutcome } from "@/modules/ai";
 import { ImageStorageService, resolvePhotoUrl } from "@/modules/storage";
 import { ANALYTICS_EVENTS, emitEvent } from "@/modules/analytics";
 
-export const IMAGE_DATA_MAX_LENGTH = 2_000_000;
+/**
+ * Vision payload budget for the data URL the server accepts. Mirrors the
+ * client-side cap in src/lib/image.ts: ~650K chars ≈ 475KB binary, under the
+ * 500KB vision payload target. The server must never slice a base64 string —
+ * an oversized payload is rejected wholesale and the client re-encodes
+ * instead.
+ */
+export const IMAGE_DATA_MAX_LENGTH = 650_000;
 
 export const imageDataSchema = z
   .string()
   .min(24, "imageData is missing")
-  .max(IMAGE_DATA_MAX_LENGTH, "imageData exceeds 2MB — resize the image and try again")
+  .max(IMAGE_DATA_MAX_LENGTH, "imageData exceeds the 475KB vision payload limit — resize the image and try again")
   .refine((value) => value.startsWith("data:image/"), {
     message: "imageData must be a data:image URL",
+  })
+  .refine((value) => {
+    try {
+      const base64 = value.slice(value.indexOf(",") + 1);
+      return base64.length > 0 && Buffer.from(base64, "base64").length > 0;
+    } catch {
+      return false;
+    }
+  }, {
+    message: "imageData must contain valid base64 image bytes",
   });
 
 export const addToWardrobeInputSchema = z.object({

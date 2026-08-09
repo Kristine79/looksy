@@ -138,6 +138,7 @@ export const en = {
     another: "Add another piece",
     retryAnalysis: "Retry analysis",
     errRead: "Could not read this image.",
+    errTooLarge: "Photo is too large. Please choose an image smaller than {mb} MB.",
     errSaved: "The piece was saved, but I couldn't analyze it yet. You can retry.",
     errGeneric: "Something went wrong, please try again.",
   },

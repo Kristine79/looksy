@@ -31,6 +31,9 @@ export interface JinaEmbeddingConfig {
  *                                  (non-reasoning, predictable latency / structured JSON).
  *                                  Falls back to AI_MODEL when not set.
  * - AI_VISION_MODEL              — vision model used for clothing analysis
+ * - AI_VISION_TIMEOUT_MS         — per-request timeout for vision analysis
+ *                                  (default: 60000). Applies ONLY to vision;
+ *                                  chat/recommendation keep their own budget.
  * - AI_EMBEDDING_MODEL           — embeddings model (legacy path; Jina is primary)
  *
  * Business logic never reads env directly; it depends on the AIProvider
@@ -43,6 +46,8 @@ export interface AIProviderConfig {
   /** Model used for the final outfit recommendation (Today's Look) generation. */
   recommendationModel: string;
   visionModel: string;
+  /** Per-request timeout (ms) for clothing image analysis. Defaults to 60000. */
+  visionTimeoutMs: number;
   embeddingModel: string;
   /** Optional Jina embedding provider — used for embeddings when configured. */
   jinaEmbedding: JinaEmbeddingConfig | null;
@@ -50,6 +55,12 @@ export interface AIProviderConfig {
 
 export const DEFAULT_JINA_EMBEDDING_MODEL = "jina-embeddings-v4";
 export const DEFAULT_JINA_BASE_URL = "https://api.jina.ai/v1";
+export const DEFAULT_VISION_TIMEOUT_MS = 60_000;
+
+function resolveVisionTimeoutMs(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : DEFAULT_VISION_TIMEOUT_MS;
+}
 
 export function getAIProviderConfig(
   env: Record<string, string | undefined> = process.env
@@ -62,6 +73,7 @@ export function getAIProviderConfig(
     generationModel,
     recommendationModel: env.AI_RECOMMENDATION_MODEL ?? generationModel,
     visionModel: env.AI_VISION_MODEL ?? VISION_MODEL,
+    visionTimeoutMs: resolveVisionTimeoutMs(env.AI_VISION_TIMEOUT_MS),
     embeddingModel: env.AI_EMBEDDING_MODEL ?? EMBEDDING_MODEL,
     jinaEmbedding: jinaApiKey
       ? {

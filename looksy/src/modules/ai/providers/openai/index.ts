@@ -24,6 +24,7 @@ export class OpenAIProvider implements AIProvider {
   readonly recommendationModel: string;
   readonly embeddingModel: string;
   readonly visionModel: string;
+  private readonly visionTimeoutMs: number;
   private readonly jinaEmbedding: JinaEmbeddingConfig | null;
 
   constructor(
@@ -34,6 +35,7 @@ export class OpenAIProvider implements AIProvider {
     this.recommendationModel = config.recommendationModel;
     this.embeddingModel = config.embeddingModel;
     this.visionModel = config.visionModel;
+    this.visionTimeoutMs = config.visionTimeoutMs;
     this.jinaEmbedding = config.jinaEmbedding;
   }
 
@@ -51,10 +53,14 @@ export class OpenAIProvider implements AIProvider {
   async analyzeClothingImage(
     request: ClothingAnalysisRequest
   ): Promise<ClothingAnalysisWithConfidence> {
-    return analyzeClothingImage(this.getClient(), {
-      ...request,
-      model: request.model ?? this.visionModel,
-    });
+    return analyzeClothingImage(
+      this.getClient(),
+      {
+        ...request,
+        model: request.model ?? this.visionModel,
+      },
+      this.visionTimeoutMs
+    );
   }
 
   async generateRecommendation(request: GenerateRecommendationRequest): Promise<GeneratedText> {

@@ -120,6 +120,49 @@ describe("OpenAIProvider", () => {
     const parsed = parseVisionJson('{"category":"pants","colors":[],"season":[],"formality":2,"attributes":{}}');
     expect(parsed.category).toBe("pants");
   });
+
+  it("passes the vision timeout as a per-request option", async () => {
+    const client = createMockClient();
+    const provider = new OpenAIProvider(client as never, getAIProviderConfig({
+      AI_VISION_MODEL: "qwen3.7-plus",
+      AI_VISION_TIMEOUT_MS: "90000",
+    }));
+
+    await provider.analyzeClothingImage({ imageUrl: "data:image/jpeg;base64,AAAA" });
+
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "qwen3.7-plus" }),
+      { timeout: 90000 }
+    );
+  });
+
+  it("uses the default vision timeout when the env var is missing", async () => {
+    const client = createMockClient();
+    const provider = new OpenAIProvider(client as never, getAIProviderConfig({}));
+
+    await provider.analyzeClothingImage({ imageUrl: "data:image/jpeg;base64,AAAA" });
+
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-4o-mini" }),
+      { timeout: 60_000 }
+    );
+  });
+
+  it("does not attach the vision timeout to recommendation requests", async () => {
+    const client = createMockClient();
+    client.chat.completions.create = vi.fn(async () => ({
+      choices: [{ message: { content: VALID_JSON } }],
+    }));
+    const provider = new OpenAIProvider(client as never, getAIProviderConfig({
+      AI_VISION_TIMEOUT_MS: "90000",
+    }));
+
+    await provider.generateRecommendation({ systemPrompt: "s", userPrompt: "u" });
+
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(1);
+    const args = client.chat.completions.create.mock.calls[0] as unknown[];
+    expect(args[1]).toBeUndefined();
+  });
 });
 
 describe("OpenAI client configuration", () => {
@@ -175,7 +218,14 @@ describe("getAIProviderConfig", () => {
     // recommendation model falls back to the general generation model
     expect(config.recommendationModel).toBe("gpt-4o");
     expect(config.visionModel).toBe("gpt-4o-mini");
+    expect(config.visionTimeoutMs).toBe(60_000);
     expect(config.embeddingModel).toBe("text-embedding-3-small");
+  });
+
+  it("resolves vision timeout overrides, rejecting invalid values", () => {
+    expect(getAIProviderConfig({ AI_VISION_TIMEOUT_MS: "45000" }).visionTimeoutMs).toBe(45_000);
+    expect(getAIProviderConfig({ AI_VISION_TIMEOUT_MS: "bogus" }).visionTimeoutMs).toBe(60_000);
+    expect(getAIProviderConfig({ AI_VISION_TIMEOUT_MS: "0" }).visionTimeoutMs).toBe(60_000);
   });
 
   it("resolves all overrides from environment variables", () => {

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addToWardrobeAction, reprocessItemAction } from "@/modules/closet/actions";
-import { readImageFile } from "@/lib/image";
+import { ImageFileError, MAX_UPLOAD_IMAGE_SIZE_MB, readImageFile } from "@/lib/image";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useTranslation } from "@/i18n/locale-provider";
@@ -51,7 +51,11 @@ export function AddClothingForm({ autoFocus = false, onAdded }: AddClothingFormP
       setPreview(dataUrl);
       setPhase("uploaded");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("add.errRead"));
+      if (err instanceof ImageFileError && err.code === "too-large") {
+        setError(t("add.errTooLarge", { mb: MAX_UPLOAD_IMAGE_SIZE_MB }));
+      } else {
+        setError(err instanceof Error ? err.message : t("add.errRead"));
+      }
       setPhase("error");
     }
   }
@@ -177,7 +181,9 @@ export function AddClothingForm({ autoFocus = false, onAdded }: AddClothingFormP
               <CameraIcon className="h-4.5 w-4.5" />
             </span>
             <span className="text-sm font-medium text-ink">{t("add.choose")}</span>
-            <span className="text-[11px] text-muted">{t("add.limit", { mb: 4 })}</span>
+            <span className="text-[11px] text-muted">
+              {t("add.limit", { mb: MAX_UPLOAD_IMAGE_SIZE_MB })}
+            </span>
           </label>
 
           <input

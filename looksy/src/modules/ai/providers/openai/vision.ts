@@ -1,5 +1,6 @@
 import type OpenAI from "openai";
 import { InvalidAIResponseError } from "@/modules/ai/errors";
+import { DEFAULT_VISION_TIMEOUT_MS } from "@/modules/ai/config";
 import { VISION_MODEL } from "@/modules/ai/types";
 import type {
   ClothingAnalysisRequest,
@@ -24,27 +25,34 @@ Do not add any text outside the JSON object.`;
 
 export async function analyzeClothingImage(
   client: OpenAI,
-  request: ClothingAnalysisRequest
+  request: ClothingAnalysisRequest,
+  timeoutMs: number = DEFAULT_VISION_TIMEOUT_MS
 ): Promise<ClothingAnalysisWithConfidence> {
   const model = request.model ?? VISION_MODEL;
 
   try {
-    const response = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: VISION_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: request.imageUrl },
-            },
-          ],
-        },
-      ],
-      response_format: { type: "json_object" },
-    });
+    const response = await client.chat.completions.create(
+      {
+        model,
+        messages: [
+          { role: "system", content: VISION_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: request.imageUrl },
+              },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+      },
+      // Vision gets its own, longer timeout (AI_VISION_TIMEOUT_MS). The
+      // shared client keeps the strict 30s fail-fast budget for chat and
+      // recommendations; this per-request option overrides it for vision only.
+      { timeout: timeoutMs }
+    );
 
     const content = response.choices[0]?.message?.content;
     if (!content) {

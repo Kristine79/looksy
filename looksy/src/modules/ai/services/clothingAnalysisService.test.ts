@@ -105,6 +105,25 @@ describe("validateClothingAnalysis", () => {
       validateClothingAnalysis({ ...VALID_ANALYSIS, category: "" })
     ).toThrow("failed validation");
   });
+
+  it("normalizes model category variants onto enum-compatible values", () => {
+    const cases: Record<string, string> = {
+      "t-shirt": "tshirt",
+      "T-Shirt": "tshirt",
+      top: "shirt",
+      Clothing: "other",
+      shoes: "shoes",
+    };
+    for (const [raw, expected] of Object.entries(cases)) {
+      const result = validateClothingAnalysis({ ...VALID_ANALYSIS, category: raw });
+      expect(result.category).toBe(expected);
+    }
+  });
+
+  it("maps unknown categories to other", () => {
+    const result = validateClothingAnalysis({ ...VALID_ANALYSIS, category: "space suit" });
+    expect(result.category).toBe("other");
+  });
 });
 
 describe("ClothingAnalysisService", () => {

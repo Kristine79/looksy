@@ -15,9 +15,10 @@ vi.mock("@/modules/closet/actions", () => ({
   reprocessItemAction: reprocessItemActionMock,
 }));
 
-vi.mock("@/lib/image", () => ({
-  readImageFile: readImageFileMock,
-}));
+vi.mock("@/lib/image", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/image")>("@/lib/image");
+  return { ...actual, readImageFile: readImageFileMock };
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: refreshMock }),
@@ -96,6 +97,20 @@ describe("AddClothingForm", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Please choose an image file")).toBeInTheDocument();
+    });
+  });
+
+  it("shows the localized error for files larger than 10 MB", async () => {
+    const { ImageFileError } = await vi.importActual<typeof import("@/lib/image")>("@/lib/image");
+    readImageFileMock.mockRejectedValue(new ImageFileError("Image is too large — max 10MB", "too-large"));
+    const { container } = render(<AddClothingForm />);
+    const input = container.querySelector('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [fileFor()] } });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Photo is too large. Please choose an image smaller than 10 MB.")
+      ).toBeInTheDocument();
     });
   });
 });
