@@ -3,6 +3,7 @@
 import { resolvePhotoUrl } from "@/modules/storage";
 import type { TodayLookResult } from "@/modules/recommendations/server";
 import { useTranslation } from "@/i18n/locale-provider";
+import { localCategory, localizedLookTitle } from "@/i18n/presentation";
 import { EvidenceList } from "./EvidenceList";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { ImageOffIcon, ShirtIcon } from "@/components/ui/icons";
@@ -33,6 +34,7 @@ export function OutfitCard({
   const confidence = Math.round((look.recommendation.confidence ?? 0) * 100);
   const hasPhotos = look.items.some((entry) => entry.photos.length > 0);
   const occasionLabel = look.occasion ? t(`occasions.${look.occasion.toLowerCase()}`) : null;
+  const title = localizedLookTitle(t, look);
 
   return (
     <article className="overflow-hidden rounded-2xl border border-line bg-surface">
@@ -43,7 +45,7 @@ export function OutfitCard({
               {occasionLabel ?? t("outfit.occasionFallback")}
             </p>
             <h2 className="mt-1.5 text-xl font-medium tracking-tight text-ink sm:text-2xl">
-              {look.name}
+              {title}
             </h2>
           </div>
           <div className="flex flex-col items-end gap-1">
@@ -72,10 +74,7 @@ export function OutfitCard({
             {look.items.map((entry) => {
               const photo = entry.photos.find((p) => p.thumbnailUrl ?? p.url);
               const imageUrl = photo ? resolvePhotoUrl(photo) : null;
-              const category = t(`categories.${entry.item.type.toLowerCase()}`);
-              const display = category
-                ? category
-                : capitalize(entry.item.type);
+              const display = localCategory(t, entry.item.type);
               const name = entry.item.subType ? capitalize(entry.item.subType) : display;
               return (
                 <li key={entry.item.id}>
@@ -113,8 +112,7 @@ export function OutfitCard({
         ) : (
           <ul className="flex flex-wrap gap-2" role="list">
             {look.items.map((entry) => {
-              const category = t(`categories.${entry.item.type.toLowerCase()}`);
-              const display = category ? category : capitalize(entry.item.type);
+              const display = localCategory(t, entry.item.type);
               return (
                 <li
                   key={entry.item.id}
@@ -142,7 +140,7 @@ export function OutfitCard({
         ) : null}
 
         {look.evidence.length > 0 ? (
-          <EvidenceList items={look.evidence.map((evidence) => evidence.text)} />
+          <EvidenceList items={look.evidence} />
         ) : null}
 
         <FeedbackButtons

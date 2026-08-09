@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/Badge";
 import { useTranslation } from "@/i18n/locale-provider";
+import { memoryLabel } from "@/i18n/presentation";
 import type { FashionMemoryRow } from "@/modules/recommendations";
 
 export interface MemoryCardProps {
@@ -25,11 +26,12 @@ export function MemoryCard({ memory }: MemoryCardProps) {
   const { t } = useTranslation();
   const tone = STATUS_TONE[memory.status] ?? "neutral";
   const confidence = Math.max(0, Math.min(1, memory.confidence));
+  const label = memoryLabel(t, memory);
 
   return (
     <article className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-medium text-ink">{memory.description}</h4>
+        <h4 className="text-sm font-medium text-ink">{label}</h4>
         <Badge tone={tone}>{t(`memory.status.${memory.status}`) ?? memory.status}</Badge>
       </div>
 

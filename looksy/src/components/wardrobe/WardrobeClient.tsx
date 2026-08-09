@@ -3,10 +3,12 @@
 import { useState } from "react";
 import type { WardrobeItemWithPhotos } from "@/modules/closet";
 import { ClothingCard } from "@/components/clothing/ClothingCard";
+import { ItemDetailsDrawer } from "@/components/clothing/ItemDetailsDrawer";
 import { AddClothingForm } from "@/components/clothing/AddClothingForm";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useTranslation } from "@/i18n/locale-provider";
+import { localCategory } from "@/i18n/presentation";
 import { pluralRu } from "@/i18n";
 import { PlusIcon, ShirtIcon } from "@/components/ui/icons";
 
@@ -24,16 +26,6 @@ export interface WardrobeClientProps {
   counts: WardrobeCounts;
 }
 
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function localCategory(t: (key: string) => string, type: string): string {
-  const key = `categories.${type.toLowerCase()}`;
-  const label = t(key);
-  return label !== key ? label : capitalize(type);
-}
-
 /**
  * Wardrobe — the digital closet. The collection is the focus; the add flow
  * stays tucked behind a single primary action and never competes with it.
@@ -46,6 +38,11 @@ export function WardrobeClient({
 }: WardrobeClientProps) {
   const { t, locale } = useTranslation();
   const [adding, setAdding] = useState(items.length === 0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const selectedItem = selectedId
+    ? (items.find((item) => item.id === selectedId) ?? null)
+    : null;
 
   const piecesLabel =
     locale === "ru"
@@ -173,7 +170,7 @@ export function WardrobeClient({
 
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
             {items.map((item) => (
-              <ClothingCard key={item.id} item={item} />
+              <ClothingCard key={item.id} item={item} onOpenDetails={(item) => setSelectedId(item.id)} />
             ))}
           </div>
         </section>
@@ -184,6 +181,14 @@ export function WardrobeClient({
           description={t("wardrobe.emptyDescription")}
         />
       )}
+
+      {selectedItem ? (
+        <ItemDetailsDrawer
+          key={selectedItem.id}
+          item={selectedItem}
+          onClose={() => setSelectedId(null)}
+        />
+      ) : null}
     </div>
   );
 }

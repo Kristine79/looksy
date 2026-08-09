@@ -40,12 +40,14 @@ export default async function RecommendationsPage() {
   const locale = await getLocale();
 
   const [latestLook, memories, wardrobe] = await Promise.all([
-    getLatestLook(userId),
+    getLatestLook(userId, locale),
     getStyleMemories(userId),
     getWardrobeForPage(userId, {}),
   ]);
 
-  const initialLook = latestLook ? await getLookDetails(userId, latestLook.outfitId) : null;
+  const initialLook = latestLook
+    ? await getLookDetails(userId, latestLook.outfitId, locale)
+    : null;
 
   const swapCandidates = wardrobe
     .filter(

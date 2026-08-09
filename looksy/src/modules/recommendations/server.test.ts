@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AIError } from "@/modules/ai/errors";
-import { FALLBACK_MESSAGE } from "./fallback";
+import { fallbackMessage } from "./fallback";
 
 const { findItemsMock, findPhotosMock, createOutfitMock, recommendMock, emitEventMock } =
   vi.hoisted(() => ({
@@ -118,7 +118,7 @@ describe("getTodayLook fallback contract", () => {
     const result = await getTodayLook("user-1", {});
 
     expect(result.degraded).toBe(true);
-    expect(result.message).toBe(FALLBACK_MESSAGE);
+    expect(result.message).toBe(fallbackMessage("en"));
     expect(result.model).toBe("fallback");
     expect(result.items).toHaveLength(1);
     expect(result.items[0]!.item).toEqual(activeItem);

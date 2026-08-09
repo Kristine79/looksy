@@ -124,7 +124,7 @@ describe("RecommendationService.recommend", () => {
     expect(result.recommendation.confidence).toBe(0.85);
     expect(result.items.map((i) => i.id)).toEqual(["item-1"]);
     expect(result.evidence.length).toBeGreaterThan(0);
-    expect(result.evidence.some((e) => e.includes("Preferred color palette: navy"))).toBe(true);
+    expect(result.evidence.some((e) => e.en.includes("Preferred color palette: navy"))).toBe(true);
     expect(result.model).toBe("gpt-4o");
     expect(result.createdAt).toBeInstanceOf(Date);
   });

@@ -31,11 +31,25 @@ export interface OutfitScores {
   total?: number;
 }
 
+export type EvidenceKey =
+  | "palette"
+  | "styleKeywords"
+  | "formality"
+  | "mostWorn"
+  | "savedOutfits"
+  | "averageRating"
+  | "feedbackActions"
+  | "learnedMemory";
+
 export interface EvidenceItem {
   type: string;
   text: string;
   source: string;
   confidence?: number;
+  /** Structured presentation hint — localized at render time when present. */
+  key?: EvidenceKey;
+  /** Parameters for the localized presentation; shape depends on `key`. */
+  params?: Record<string, unknown>;
 }
 
 export interface GenerationContext {

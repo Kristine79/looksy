@@ -107,19 +107,23 @@ function createContext(overrides: Partial<RecommendationContext> = {}): Recommen
     weather: { tempC: 18, condition: "light rain", humidity: 70 },
     style,
     candidates: [ITEM],
+    locale: "en",
     ...overrides,
   };
 }
 
 describe("PromptBuilder.buildEvidence", () => {
-  it("derives palette, ratings, saved outfits, memories and worn items as facts", () => {
+  it("derives palette, ratings, saved outfits, memories and worn items as structured facts", () => {
     const evidence = new PromptBuilder().buildEvidence(createContext());
 
-    expect(evidence).toContain("Preferred color palette: navy, beige");
-    expect(evidence.some((e) => e.includes("Most worn items") && e.includes("worn 5x"))).toBe(true);
-    expect(evidence.some((e) => e.includes("Based on your saved outfits"))).toBe(true);
-    expect(evidence.some((e) => e.includes("Average outfit rating: 3.5/4"))).toBe(true);
-    expect(evidence.some((e) => e.includes("You prefer earth tones"))).toBe(true);
+    const palette = evidence.find((e) => e.key === "palette");
+    expect(palette?.en).toBe("Preferred color palette: navy, beige");
+    expect(palette?.params).toEqual({ colors: ["navy", "beige"] });
+
+    expect(evidence.some((e) => e.key === "mostWorn" && e.en.includes("worn 5x"))).toBe(true);
+    expect(evidence.some((e) => e.key === "savedOutfits")).toBe(true);
+    expect(evidence.some((e) => e.key === "averageRating" && e.en.includes("3.5/4"))).toBe(true);
+    expect(evidence.some((e) => e.key === "learnedMemory" && e.en.includes("You prefer earth tones"))).toBe(true);
   });
 
   it("returns empty list when there is no user data", () => {
@@ -144,7 +148,7 @@ describe("PromptBuilder.buildSystemPrompt", () => {
     expect(systemPrompt).toContain("Verified evidence about this user");
   });
 
-  it("includes evidence facts in the system prompt", () => {
+  it("includes evidence facts in the system prompt in English", () => {
     const { systemPrompt } = new PromptBuilder().build(createContext());
     expect(systemPrompt).toContain("Preferred color palette: navy, beige");
   });
@@ -159,6 +163,11 @@ describe("PromptBuilder.buildUserPrompt", () => {
     expect(userPrompt).toContain("18°C");
     expect(userPrompt).toContain("itemId=item-1");
     expect(userPrompt).toContain("Pick 2-6 items");
+  });
+
+  it("demands the requested language for user-facing text", () => {
+    const { userPrompt } = new PromptBuilder().build(createContext({ locale: "ru" }));
+    expect(userPrompt).toContain("Write all user-facing text (explanations, reasons, outfit name) in Russian.");
   });
 
   it("handles missing occasion and weather", () => {

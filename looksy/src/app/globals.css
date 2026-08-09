@@ -212,6 +212,44 @@ body {
 }
 
 /* ============================================================
+   Dialog motion — soft, short; reduced-motion respected
+   ============================================================ */
+
+@keyframes dialog-overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+@keyframes dialog-panel-in-desktop {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+@layer utilities {
+  .animate-dialog-overlay {
+    animation: dialog-overlay-in 180ms ease-out both;
+  }
+  .animate-dialog-panel {
+    animation: dialog-panel-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @media (min-width: 768px) {
+    .animate-dialog-sheet {
+      animation-name: dialog-panel-in-desktop;
+    }
+  }
+}
+
+/* ============================================================
    Motion — subtle, purposeful, fast; reduced-motion respected
    ============================================================ */
 

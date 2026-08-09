@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useTranslation } from "@/i18n/locale-provider";
+import { localCategory } from "@/i18n/presentation";
 import { HeartIcon, ShirtIcon, SwapIcon, XCircleIcon } from "@/components/ui/icons";
 
 export type FeedbackAction = "love" | "wore" | "change" | "skip";
@@ -160,10 +161,10 @@ export function FeedbackButtons({
                 className="h-9 w-full rounded-[8px] border border-line-strong bg-surface px-2 text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-interactive"
               >
                 {look.items.map((entry) => {
-                  const cat = t(`categories.${entry.item.type.toLowerCase()}`);
+                  const cat = localCategory(t, entry.item.type);
                   return (
                     <option key={entry.item.id} value={entry.item.id}>
-                      {cat ? cat : entry.item.type.charAt(0).toUpperCase() + entry.item.type.slice(1)}
+                      {cat}
                       {entry.item.subType ? ` · ${entry.item.subType.charAt(0).toUpperCase() + entry.item.subType.slice(1)}` : ""}
                     </option>
                   );
@@ -181,10 +182,10 @@ export function FeedbackButtons({
                   <option value="">{t("feedback.noneYet")}</option>
                 ) : null}
                 {swapCandidates.map((entry) => {
-                  const cat = t(`categories.${entry.item.type.toLowerCase()}`);
+                  const cat = localCategory(t, entry.item.type);
                   return (
                     <option key={entry.item.id} value={entry.item.id}>
-                      {cat ? cat : entry.item.type.charAt(0).toUpperCase() + entry.item.type.slice(1)}
+                      {cat}
                       {entry.item.subType ? ` · ${entry.item.subType.charAt(0).toUpperCase() + entry.item.subType.slice(1)}` : ""}
                     </option>
                   );

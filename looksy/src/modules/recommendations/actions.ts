@@ -10,6 +10,8 @@ import {
   todayLookInputSchema,
 } from "@/modules/recommendations/server";
 import type { TodayLookInput, TodayLookResult } from "@/modules/recommendations/server";
+import { translate } from "@/i18n";
+import { getLocale } from "@/i18n/server";
 import { logger } from "@/lib/logger";
 
 /**
@@ -37,8 +39,9 @@ export interface TodayLookActionResult {
 export async function getTodayLookAction(input: TodayLookInput = {}): Promise<TodayLookActionResult> {
   try {
     const userId = await getCurrentUserId();
+    const locale = await getLocale();
     todayLookInputSchema.parse(input);
-    const look = await getTodayLook(userId, input);
+    const look = await getTodayLook(userId, input, locale);
     revalidatePath("/dashboard/recommendations");
     return {
       error: false,
@@ -48,23 +51,26 @@ export async function getTodayLookAction(input: TodayLookInput = {}): Promise<To
     };
   } catch (error) {
     logger.error("today_look_action_failed", error);
+    const locale = await getLocale();
     return {
       error: true,
       degraded: false,
       look: null,
-      message: "We couldn't build a look right now. Please try again in a moment.",
+      message: translate(locale, "today.errorGenerate"),
     };
   }
 }
 
 export async function getLatestLookAction() {
   const userId = await getCurrentUserId();
-  return getLatestLook(userId);
+  const locale = await getLocale();
+  return getLatestLook(userId, locale);
 }
 
 export async function getLookDetailsAction(outfitId: string) {
   const userId = await getCurrentUserId();
-  return getLookDetails(userId, outfitId);
+  const locale = await getLocale();
+  return getLookDetails(userId, outfitId, locale);
 }
 
 export async function getStyleMemoriesAction() {

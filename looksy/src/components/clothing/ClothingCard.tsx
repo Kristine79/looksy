@@ -6,7 +6,8 @@ import { retryItemFormAction, archiveItemFormAction } from "@/modules/closet/act
 import { AiStatusBadge } from "./AiStatusBadge";
 import type { AiStatus } from "./AiStatusBadge";
 import { useTranslation } from "@/i18n/locale-provider";
-import { ShirtIcon, TrashIcon } from "@/components/ui/icons";
+import { localCategory, localColorName } from "@/i18n/presentation";
+import { ExpandIcon, ShirtIcon, TrashIcon } from "@/components/ui/icons";
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -14,25 +15,33 @@ function capitalize(value: string): string {
 
 export interface ClothingCardProps {
   item: WardrobeItemWithPhotos;
+  onOpenDetails?: (item: WardrobeItemWithPhotos) => void;
 }
 
 /**
  * Wardrobe catalog card. Image-first and calm: the photo carries the card,
- * metadata stays in small, quiet type. Items without a photo get an
- * intentional editorial placeholder instead of a technical-looking box.
+ * metadata stays in small, quiet type. The card opens item details — a quiet
+ * full-card button that keeps the archive action independent.
  */
-export function ClothingCard({ item }: ClothingCardProps) {
+export function ClothingCard({ item, onOpenDetails }: ClothingCardProps) {
   const { t } = useTranslation();
   const primaryPhoto = item.photos.find((p) => p.isPrimary) ?? item.photos[0];
   const imageUrl = primaryPhoto ? resolvePhotoUrl(primaryPhoto) : null;
   const analyzing = item.aiStatus === "pending" || item.aiStatus === "processing";
   const aiStatus = item.aiStatus as AiStatus;
   const label = analyzing ? t("clothing.analyzingLabel") : capitalize(item.type);
-  const category = t(`categories.${item.type.toLowerCase()}`);
-  const categoryLabel = category !== `categories.${item.type.toLowerCase()}` ? category : label;
+  const categoryLabel = analyzing ? label : localCategory(t, item.type);
 
   return (
-    <article className="group overflow-hidden rounded-xl border border-line bg-surface transition-colors hover:border-line-strong">
+    <article className="group relative overflow-hidden rounded-xl border border-line bg-surface transition-colors hover:border-line-strong focus-within:border-line-strong">
+      <button
+        type="button"
+        onClick={() => onOpenDetails?.(item)}
+        aria-haspopup="dialog"
+        aria-label={t("clothing.openDetails", { label })}
+        className="absolute inset-0 z-10 cursor-pointer rounded-xl"
+      />
+
       <div className="relative aspect-[4/5] overflow-hidden bg-surface-muted">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -54,8 +63,15 @@ export function ClothingCard({ item }: ClothingCardProps) {
           <AiStatusBadge status={aiStatus} confidence={item.aiConfidence} model={item.aiModelVersion} />
         </div>
 
+        <span
+          aria-hidden="true"
+          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-surface/90 text-muted opacity-0 shadow-sm backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          <ExpandIcon className="h-3.5 w-3.5" />
+        </span>
+
         {item.aiStatus === "failed" ? (
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-black/50 to-transparent p-3">
+          <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-center bg-gradient-to-t from-black/50 to-transparent p-3">
             <span className="sr-only">{t("ai.failed")}</span>
             <form action={retryItemFormAction.bind(null, item.id)}>
               <button
@@ -84,11 +100,14 @@ export function ClothingCard({ item }: ClothingCardProps) {
 
         <div className="flex items-center justify-between pt-1">
           {item.colors.length > 0 ? (
-            <div className="flex items-center gap-1" aria-label={item.colors.map((c) => c.name).join(", ")}>
+            <div
+              className="flex items-center gap-1"
+              aria-label={item.colors.map((c) => localColorName(t, c.name)).join(", ")}
+            >
               {item.colors.slice(0, 4).map((color) => (
                 <span
                   key={`${color.name}-${color.hex}`}
-                  title={color.name}
+                  title={localColorName(t, color.name)}
                   className="h-3 w-3 rounded-full border border-line"
                   style={{ backgroundColor: color.hex }}
                 />
@@ -101,7 +120,7 @@ export function ClothingCard({ item }: ClothingCardProps) {
             <span className="text-[11px] text-faint">{t("clothing.noColors")}</span>
           )}
 
-          <form action={archiveItemFormAction.bind(null, item.id)}>
+          <form action={archiveItemFormAction.bind(null, item.id)} className="relative z-20">
             <button
               type="submit"
               title={t("clothing.archive")}

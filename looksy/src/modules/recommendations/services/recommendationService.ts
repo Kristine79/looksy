@@ -11,6 +11,7 @@ import type {
   RecommendationResult,
   WhyNotRecommendedRequest,
 } from "./types";
+import { translate } from "@/i18n";
 
 const MAX_OUTFIT_SIZE = 8;
 
@@ -58,6 +59,7 @@ export class RecommendationService {
       weather: request.weather ?? null,
       style: retrieval.context,
       candidates,
+      locale: request.locale ?? "en",
     };
 
     const evidence = this.promptBuilder.buildEvidence(context);
@@ -171,7 +173,7 @@ export class RecommendationService {
       recommendation: {
         outfit: [],
         explanation: {
-          whyChosen: "Your wardrobe is empty. Add items to receive personalized recommendations.",
+          whyChosen: translate(request.locale ?? "en", "recommendation.emptyWardrobe"),
           styleMatch: "",
           contextMatch: "",
         },

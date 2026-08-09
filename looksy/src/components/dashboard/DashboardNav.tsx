@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "@/i18n/locale-provider";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { LocaleSwitcher } from "@/components/theme/LocaleSwitcher";
+import { HelpDialog } from "@/components/dashboard/HelpDialog";
+import { HelpIcon } from "@/components/ui/icons";
 
 const LINKS = [
   { href: "/dashboard/recommendations", key: "nav.todaysLook" },
@@ -18,9 +21,11 @@ const LINKS = [
 export function DashboardNav() {
   const pathname = usePathname();
   const { t } = useTranslation();
+  const [helpOpen, setHelpOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur-sm">
+    <>
+      <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur-sm">
       <div className="mx-auto flex w-full max-w-5xl flex-col px-4 sm:px-6">
         <div className="flex h-14 items-center justify-between gap-3">
           <Link
@@ -40,6 +45,17 @@ export function DashboardNav() {
           </Link>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={helpOpen}
+              aria-label={t("help.navLabel")}
+              className="flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-sm text-muted transition-colors hover:bg-surface-muted hover:text-ink"
+            >
+              <HelpIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("help.navLabel")}</span>
+            </button>
             <LocaleSwitcher />
             <span className="hidden h-5 w-px bg-line sm:block" aria-hidden="true" />
             <ThemeToggle />
@@ -72,6 +88,9 @@ export function DashboardNav() {
           })}
         </nav>
       </div>
-    </header>
+      </header>
+
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+    </>
   );
 }

@@ -16,7 +16,13 @@ import type {
   OutfitScores,
   WeatherSnapshot,
 } from "@/modules/outfits";
-import { FALLBACK_MESSAGE, buildEmptyResult, buildFallbackRecommendation } from "./fallback";
+import { translate } from "@/i18n";
+import type { Locale } from "@/i18n";
+import {
+  buildEmptyResult,
+  buildFallbackRecommendation,
+  fallbackMessage,
+} from "./fallback";
 import {
   FashionMemoryService,
   MemoriesRepository,
@@ -30,6 +36,7 @@ import type { FashionMemoryRow } from "@/modules/recommendations";
 import type {
   OutfitRecommendation,
   RecommendationResult,
+  StructuredEvidence,
 } from "@/modules/recommendations";
 import type { MemoryAutomationHook } from "@/modules/outfits/feedbackService";
 import { ANALYTICS_EVENTS, emitEvent } from "@/modules/analytics";
@@ -94,10 +101,12 @@ function buildRecommendationEngine() {
   return new RecommendationService(provider, retrieval, promptBuilder);
 }
 
-function evidenceStringsToItems(evidence: string[]): EvidenceItem[] {
-  return evidence.map((text) => ({
+function evidenceToItems(evidence: StructuredEvidence[]): EvidenceItem[] {
+  return evidence.map((entry) => ({
     type: "user_data",
-    text,
+    text: entry.en,
+    key: entry.key,
+    params: entry.params,
     source: "style_context",
     confidence: 0.9,
   }));
@@ -115,7 +124,8 @@ function evidenceStringsToItems(evidence: string[]): EvidenceItem[] {
  */
 export async function getTodayLook(
   userId: string,
-  input: TodayLookInput = {}
+  input: TodayLookInput = {},
+  locale: Locale = "en"
 ): Promise<TodayLookResult> {
   const parsed = todayLookInputSchema.parse(input);
   const occasion = parsed.occasion ?? null;
@@ -129,25 +139,25 @@ export async function getTodayLook(
   // when the user has no active items.
   const probe = await closetRepository.findItems(userId, { status: "active", limit: 1 });
   if (probe.length === 0) {
-    const empty = buildEmptyResult();
+    const empty = buildEmptyResult(locale);
     const outfit = await outfitService.createOutfit(
       userId,
       {
-        name: lookName(empty.recommendation, occasion),
+        name: lookName(empty.recommendation, occasion, locale),
         source: "ai",
         occasion,
         mood: parsed.mood ?? null,
         weather: weather ?? undefined,
         explanation: empty.recommendation.explanation.whyChosen,
         scores: { total: empty.recommendation.confidence },
-        evidence: evidenceStringsToItems(empty.evidence),
+        evidence: evidenceToItems(empty.evidence),
         generationContext: { candidatesCount: 0, model: empty.model, promptVersion: "phase-6" },
       },
       [],
     );
     return {
       outfitId: outfit.id,
-      name: outfit.name ?? "Today's Look",
+      name: outfit.name ?? translate(locale, "recommendation.todayName"),
       occasion,
       status: outfit.status,
       recommendation: empty.recommendation,
@@ -172,6 +182,7 @@ export async function getTodayLook(
       occasion,
       weather,
       candidatesLimit: 12,
+      locale,
     });
   } catch (error) {
     // Only AI/provider failures degrade into the deterministic fallback.
@@ -191,7 +202,7 @@ export async function getTodayLook(
     });
 
     const activeItems = await closetRepository.findItems(userId, { status: "active" });
-    const fallback = buildFallbackRecommendation(activeItems);
+    const fallback = buildFallbackRecommendation(activeItems, locale);
     result = {
       userId,
       query,
@@ -202,20 +213,20 @@ export async function getTodayLook(
       createdAt: new Date(),
     };
     degraded = true;
-    message = FALLBACK_MESSAGE;
+    message = fallbackMessage(locale);
   }
 
   const outfit = await outfitService.createOutfit(
     userId,
     {
-      name: lookName(result.recommendation, occasion),
+      name: lookName(result.recommendation, occasion, locale),
       source: "ai",
       occasion,
       mood: parsed.mood ?? null,
       weather: weather ?? undefined,
       explanation: result.recommendation.explanation.whyChosen,
       scores: { total: result.recommendation.confidence },
-      evidence: evidenceStringsToItems(result.evidence),
+      evidence: evidenceToItems(result.evidence),
       generationContext: {
         candidatesCount: result.items.length,
         model: result.model,
@@ -240,12 +251,18 @@ export async function getTodayLook(
 
   return {
     outfitId: outfit.id,
-    name: outfit.name ?? "Today's Look",
+    name: outfit.name ?? translate(locale, "recommendation.todayName"),
     occasion,
     status: outfit.status,
     recommendation: result.recommendation,
     items,
-    evidence: result.evidence.map((text) => ({ type: "user_data", text, source: "style_context" })),
+    evidence: result.evidence.map((entry) => ({
+      type: "user_data",
+      text: entry.en,
+      key: entry.key,
+      params: entry.params,
+      source: "style_context",
+    })),
     scores: { total: result.recommendation.confidence },
     model: result.model,
     createdAt: outfit.createdAt,
@@ -257,7 +274,10 @@ export async function getTodayLook(
 /**
  * Latest non-dismissed outfit without any AI call — safe for server-rendered pages.
  */
-export async function getLatestLook(userId: string): Promise<LookCard | null> {
+export async function getLatestLook(
+  userId: string,
+  locale: Locale = "en"
+): Promise<LookCard | null> {
   const repository = new OutfitsRepository(db);
   const recent = await repository.findOutfits(userId, { limit: 10 });
   const latest = recent.find((outfit) => outfit.status !== "dismissed") ?? recent[0] ?? null;
@@ -266,7 +286,7 @@ export async function getLatestLook(userId: string): Promise<LookCard | null> {
   }
   return {
     outfitId: latest.id,
-    name: latest.name ?? "Today's Look",
+    name: latest.name ?? translate(locale, "recommendation.todayName"),
     occasion: latest.occasion,
     status: latest.status,
     explanation: latest.explanation,
@@ -277,7 +297,8 @@ export async function getLatestLook(userId: string): Promise<LookCard | null> {
 
 export async function getLookDetails(
   userId: string,
-  outfitId: string
+  outfitId: string,
+  locale: Locale = "en"
 ): Promise<TodayLookResult | null> {
   const outfitService = new OutfitService(new OutfitsRepository(db));
   const outfit = await outfitService.getOutfit(userId, outfitId).catch(() => null);
@@ -292,7 +313,7 @@ export async function getLookDetails(
 
   return {
     outfitId: outfit.id,
-    name: outfit.name ?? "Today's Look",
+    name: outfit.name ?? translate(locale, "recommendation.todayName"),
     occasion: outfit.occasion,
     status: outfit.status,
     recommendation: {
@@ -355,11 +376,15 @@ async function resolveLookItems(userId: string, items: ClothingItemRow[]): Promi
   }));
 }
 
-function lookName(recommendation: OutfitRecommendation, occasion: string | null): string {
+function lookName(
+  recommendation: OutfitRecommendation,
+  occasion: string | null,
+  locale: Locale
+): string {
   if (occasion) {
-    return occasion[0]!.toUpperCase() + occasion.slice(1);
+    return translate(locale, `occasions.${occasion}`);
   }
-  return "Today's Look";
+  return translate(locale, "recommendation.todayName");
 }
 
 /**

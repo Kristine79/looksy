@@ -22,7 +22,7 @@ export type {
   UserStyleContext,
   UserStyleProfileRow,
 } from "./types";
-export { PromptBuilder, RecommendationService } from "./services";
+export { PromptBuilder, RecommendationService, formatEvidenceForPrompt } from "./services";
 export {
   outfitRecommendationSchema,
   parseRecommendationResponse,
@@ -37,5 +37,6 @@ export type {
   RecommendationPrompt,
   RecommendationRequest,
   RecommendationResult,
+  StructuredEvidence,
   WhyNotRecommendedRequest,
 } from "./services";

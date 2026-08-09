@@ -78,6 +78,7 @@ Feature status:
 | Internal product analytics (event abstraction, no external platform) | Done (Phase 8) |
 | Clerk authentication | Partial — session + auto-provisioning supported; demo mode fallback |
 | Image storage (Supabase Storage, local data-URL fallback) | Done — `ImageStorageService` |
+| User Profile / Settings page (`/profile`) | **Not implemented** — no route, page component, nav entry, user menu, or edit action |
 | Production deployment | Planned (no deployment configuration yet) |
 
 ## Screenshots

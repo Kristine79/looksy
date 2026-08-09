@@ -32,6 +32,20 @@ you wear, save and review looks.
 6. **Demo mode** — without Clerk keys the app runs as the seeded `demo_user`
    with a full sample wardrobe; a banner clearly marks the sample data.
 
+## Feature Matrix (MVP Phase 8)
+
+| Feature | Status | Evidence |
+|---------|--------|----------|
+| Digital Wardrobe (`/dashboard/wardrobe`) | IMPLEMENTED | Route, page, `WardrobeClient`, server actions, tests |
+| Today's Look (`/dashboard/recommendations`) | IMPLEMENTED | Route, page, `TodayLookExperience`, server actions, tests |
+| Feedback loop (Love / Wore it / Change / Not for me) | IMPLEMENTED | `FeedbackButtons`, `outfits/actions.ts`, tests |
+| Fashion Memory UI | IMPLEMENTED | `MemoryCard`, `EvidenceList`, repository + service tests |
+| Onboarding + demo mode | IMPLEMENTED | `OnboardingBanner`, `DemoModeBanner`, `demo/actions.ts` |
+| Clerk auth + auto-provisioning | IMPLEMENTED | `auth/server.ts`, `users/service.ts` |
+| User Profile page (`/profile`) | **NOT_IMPLEMENTED** | No route, page component, nav entry, user menu, edit action or E2E test |
+| Settings page | NOT_IMPLEMENTED | Out of scope for Phase 8 |
+| Outfit history page | NOT_IMPLEMENTED | Data layer exists, no UI route |
+
 ## 3. Demo flow (5 minutes)
 
 | Step | Action | What the audience sees |
@@ -73,7 +87,11 @@ without an AI provider configured.
 - **No sign-in UI yet** — authentication is either the seeded demo user
   (no Clerk keys) or Clerk sessions; there is no `/sign-in` page shipped with
   the app.
-- **No settings/profile page** — the nav has no user menu.
+- **No settings/profile page** — Profile is **NOT_IMPLEMENTED** as a user-facing
+  feature. There is no `/profile` route, no profile page component, no entry in
+  `DashboardNav`, no user menu/avatar, no server action to edit the profile, and
+  no E2E test for a profile flow. The `users` table, Clerk auto-provisioning and
+  `user_preferences` backend are present, but they do not constitute a Profile UI.
 - **No outfit history page** — past looks are visible through the latest look;
   outfit persistence exists in the data layer.
 - **Memory confirmation UI** — memory creation is automatic (Phase 7); the UI

@@ -1,5 +1,7 @@
 import type { ClothingItemRow } from "@/modules/closet/types";
 import type { OutfitRecommendation, RecommendationResult } from "./services";
+import type { Locale } from "@/i18n";
+import { translate } from "@/i18n";
 
 /**
  * Deterministic recommendation fallback.
@@ -9,17 +11,22 @@ import type { OutfitRecommendation, RecommendationResult } from "./services";
  * The fallback builds a valid outfit from the user's own wardrobe, sorted by
  * wear history, and is clearly marked via `model: "fallback"` + `degraded: true`
  * so the UI can show a non-technical notice.
+ *
+ * All user-facing strings are resolved through the i18n dictionary at call
+ * time, so the same fallback serves every locale.
  */
 
 export const FALLBACK_MODEL = "fallback";
 export const FALLBACK_CONFIDENCE = 0.3;
 export const MAX_FALLBACK_ITEMS = 5;
 
-export const FALLBACK_MESSAGE =
-  "AI recommendation is temporarily unavailable. Showing a quick pick from your wardrobe.";
+export function fallbackMessage(locale: Locale): string {
+  return translate(locale, "recommendation.fallbackNotice");
+}
 
-export const EMPTY_WARDROBE_MESSAGE =
-  "Your wardrobe is empty. Add items to receive personalized recommendations.";
+export function emptyWardrobeMessage(locale: Locale): string {
+  return translate(locale, "recommendation.emptyWardrobe");
+}
 
 /**
  * Sort active wardrobe items into a deterministic fallback order:
@@ -44,19 +51,20 @@ function rankItems(items: ClothingItemRow[]): ClothingItemRow[] {
  */
 export function buildFallbackRecommendation(
   items: ClothingItemRow[],
+  locale: Locale = "en",
 ): Pick<RecommendationResult, "recommendation" | "items" | "model"> {
   const ranked = rankItems(items).slice(0, MAX_FALLBACK_ITEMS);
 
   const recommendation: OutfitRecommendation = {
     outfit: ranked.map((item, index) => ({
       itemId: item.id,
-      reason: fallbackReason(item, index),
+      reason: fallbackReason(item, index, locale),
     })),
     explanation: {
       whyChosen:
         ranked.length > 0
-          ? "A quick pick from your most-worn items while AI is unavailable."
-          : EMPTY_WARDROBE_MESSAGE,
+          ? translate(locale, "recommendation.fallbackWhyChosen")
+          : emptyWardrobeMessage(locale),
       styleMatch: "",
       contextMatch: "",
     },
@@ -66,11 +74,14 @@ export function buildFallbackRecommendation(
   return { recommendation, items: ranked, model: FALLBACK_MODEL };
 }
 
-function fallbackReason(item: ClothingItemRow, index: number): string {
+function fallbackReason(item: ClothingItemRow, index: number, locale: Locale): string {
   if (item.wearCount > 0) {
-    return `One of your most-worn items (${item.wearCount} wears).`;
+    return translate(locale, "recommendation.fallbackReasonWorn", { count: item.wearCount });
   }
-  return index === 0 ? "A recent addition to your wardrobe." : "Paired from your available items.";
+  return translate(
+    locale,
+    index === 0 ? "recommendation.fallbackReasonRecent" : "recommendation.fallbackReasonPaired",
+  );
 }
 
 /**
@@ -78,12 +89,14 @@ function fallbackReason(item: ClothingItemRow, index: number): string {
  * produced by `RecommendationService.emptyResult` so the caller can short-circuit
  * before invoking the embedding-backed retrieval path.
  */
-export function buildEmptyResult(): Pick<RecommendationResult, "recommendation" | "items" | "evidence" | "model"> {
+export function buildEmptyResult(
+  locale: Locale = "en",
+): Pick<RecommendationResult, "recommendation" | "items" | "evidence" | "model"> {
   return {
     recommendation: {
       outfit: [],
       explanation: {
-        whyChosen: EMPTY_WARDROBE_MESSAGE,
+        whyChosen: emptyWardrobeMessage(locale),
         styleMatch: "",
         contextMatch: "",
       },

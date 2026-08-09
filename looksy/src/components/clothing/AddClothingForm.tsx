@@ -204,9 +204,13 @@ export function AddClothingForm({ autoFocus = false, onAdded }: AddClothingFormP
 
       {phase === "uploaded" && preview ? (
         <div className="space-y-3">
-          <div className="overflow-hidden rounded-xl border border-line">
+          <div className="overflow-hidden rounded-xl border border-line bg-surface-muted p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview} alt={t("add.step1")} className="h-40 w-full object-cover" />
+            <img
+              src={preview}
+              alt={t("add.step1")}
+              className="mx-auto h-auto max-h-80 w-full object-contain"
+            />
           </div>
           <div className="flex gap-2">
             <Button type="button" onClick={handleSubmit} loading={busy}>

@@ -6,7 +6,7 @@ import { makeMemory } from "@/test/fixtures";
 describe("MemoryCard", () => {
   it("shows the memory description and status", () => {
     render(<MemoryCard memory={makeMemory()} />);
-    expect(screen.getByText("You tend to choose earth tones")).toBeInTheDocument();
+    expect(screen.getByText("Tends to choose earth tones")).toBeInTheDocument();
     expect(screen.getByText("Confirmed")).toBeInTheDocument();
   });
 

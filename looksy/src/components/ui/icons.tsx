@@ -168,6 +168,39 @@ export function GlobeIcon(props: IconProps) {
   );
 }
 
+export function XIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m6 6 12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
+export function ExpandIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 4.5H4.5V9M15 4.5h4.5V9M9 19.5H4.5V15M15 19.5h4.5V15" />
+    </svg>
+  );
+}
+
+export function HelpIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.3c-.6.3-1.1.8-1.1 1.5v.5M12 17h.01" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m6 9.5 6 6 6-6" />
+    </svg>
+  );
+}
+
 export const iconMap = {
   heart: HeartIcon,
   shirt: ShirtIcon,
@@ -187,6 +220,10 @@ export const iconMap = {
   tag: TagIcon,
   imageOff: ImageOffIcon,
   globe: GlobeIcon,
+  x: XIcon,
+  expand: ExpandIcon,
+  help: HelpIcon,
+  chevronDown: ChevronDownIcon,
 } as const;
 
 export type IconName = keyof typeof iconMap;

@@ -1,6 +1,11 @@
-import type { RecommendationContext, RecommendationPrompt } from "./types";
+import type {
+  RecommendationContext,
+  RecommendationPrompt,
+  StructuredEvidence,
+} from "./types";
 import type { ClothingItemRow } from "@/modules/closet/types";
 import type { UserStyleContext } from "@/modules/recommendations/types";
+import type { Locale } from "@/i18n";
 
 const OUTPUT_JSON_DESCRIPTION = `{
   "outfit": [ { "itemId": "<exact itemId from the wardrobe>", "reason": "<short why this item>" } ],
@@ -11,6 +16,11 @@ const OUTPUT_JSON_DESCRIPTION = `{
   },
   "confidence": 0.0
 }`;
+
+const LANGUAGE_NAMES: Record<Locale, string> = {
+  en: "English",
+  ru: "Russian",
+};
 
 /**
  * Prompt Builder — the only place where prompts are assembled.
@@ -29,7 +39,7 @@ export class PromptBuilder {
   }
 
   buildSystemPrompt(context: RecommendationContext): string {
-    const evidence = this.buildEvidence(context);
+    const evidence = formatEvidenceForPrompt(this.buildEvidence(context));
 
     return [
       "You are LOOKSY, a personal style intelligence engine.",
@@ -91,6 +101,7 @@ export class PromptBuilder {
       "",
       "Pick 2-6 items that best answer the user request.",
       "Every itemId MUST exist in the wardrobe list above.",
+      `Write all user-facing text (explanations, reasons, outfit name) in ${LANGUAGE_NAMES[context.locale]}.`,
       "Return the JSON object now."
     );
 
@@ -110,6 +121,7 @@ export class PromptBuilder {
       "Explain why a specific set of items works for THIS user.",
       "Ground every statement in the verified evidence and item attributes provided.",
       "Never suggest buying or generic fashion advice.",
+      `Write all user-facing text (explanations, reasons) in ${LANGUAGE_NAMES[context.locale]}.`,
       "Return ONLY a valid JSON object — no markdown, no commentary.",
       "",
       "Respond with JSON exactly matching this shape:",
@@ -126,8 +138,8 @@ export class PromptBuilder {
       ...(missing.length > 0 ? [`(not in the provided wardrobe: ${missing.join(", ")})`] : []),
       "",
       "Verified evidence:",
-      ...(this.buildEvidence(context).length > 0
-        ? this.buildEvidence(context)
+      ...(formatEvidenceForPrompt(this.buildEvidence(context)).length > 0
+        ? formatEvidenceForPrompt(this.buildEvidence(context))
         : ["- not enough user data yet — rely on the item attributes only."]),
       "",
       "Explain why these items fit the request, this user's style, and the context.",
@@ -140,32 +152,47 @@ export class PromptBuilder {
    * Trust Layer: derives checkable facts from user data.
    * Only statements that are provable from the data end up here —
    * the LLM is instructed to justify choices with these facts.
+   *
+   * Returns structured evidence: the localized presentation is derived from
+   * `key` + `params` at render time; `en` is the canonical English rendering
+   * used for LLM prompts and persisted history.
    */
-  buildEvidence(context: RecommendationContext): string[] {
+  buildEvidence(context: RecommendationContext): StructuredEvidence[] {
     const { style } = context;
-    const evidence: string[] = [];
+    const evidence: StructuredEvidence[] = [];
 
     const dna = style.styleProfile?.dna;
     if (dna?.colors && dna.colors.length > 0) {
-      const top = dna.colors
+      const colors = dna.colors
         .slice()
         .sort((a, b) => (b.share ?? 0) - (a.share ?? 0))
         .slice(0, 5)
         .map((c) => c.name);
-      evidence.push(`Preferred color palette: ${top.join(", ")}`);
+      evidence.push({
+        key: "palette",
+        params: { colors },
+        en: `Preferred color palette: ${colors.join(", ")}`,
+      });
     }
     if (dna?.styleWords && dna.styleWords.length > 0) {
-      evidence.push(`Style keywords: ${dna.styleWords.slice(0, 8).join(", ")}`);
+      const words = dna.styleWords.slice(0, 8);
+      evidence.push({
+        key: "styleKeywords",
+        params: { words },
+        en: `Style keywords: ${words.join(", ")}`,
+      });
     }
     if (dna?.formalityByOccasion) {
       const entries = Object.entries(dna.formalityByOccasion);
       if (entries.length > 0) {
-        evidence.push(
-          `Formality per occasion: ${entries
-            .slice(0, 4)
-            .map(([occasion, level]) => `${occasion}=${level}/5`)
-            .join(", ")}`
-        );
+        const top = entries
+          .slice(0, 4)
+          .map(([occasion, level]) => ({ occasion, level: `${level}/5` }));
+        evidence.push({
+          key: "formality",
+          params: { entries: top },
+          en: `Formality per occasion: ${top.map((entry) => `${entry.occasion}=${entry.level}`).join(", ")}`,
+        });
       }
     }
 
@@ -174,49 +201,71 @@ export class PromptBuilder {
       .sort((a, b) => b.wearCount - a.wearCount)
       .slice(0, 3);
     if (worn.length > 0) {
-      evidence.push(
-        `Most worn items: ${worn
-          .map((item) => `${item.type}${item.subType ? ` (${item.subType})` : ""} — worn ${item.wearCount}x`)
-          .join(", ")}`
-      );
+      const items = worn.map((item) => ({
+        type: item.type,
+        subType: item.subType ?? null,
+        wearCount: item.wearCount,
+      }));
+      evidence.push({
+        key: "mostWorn",
+        params: { items },
+        en: `Most worn items: ${items
+          .map((i) => `${i.type}${i.subType ? ` (${i.subType})` : ""} — worn ${i.wearCount}x`)
+          .join(", ")}`,
+      });
     }
 
     const savedCount = style.recentOutfits.filter((o) => o.status === "saved").length;
     if (savedCount > 0) {
-      evidence.push(`Based on your saved outfits: ${savedCount} saved`);
+      evidence.push({
+        key: "savedOutfits",
+        params: { count: savedCount },
+        en: `Based on your saved outfits: ${savedCount} saved`,
+      });
     }
 
     const rated = style.feedback.filter((f) => f.rating != null);
     if (rated.length > 0) {
       const avg = rated.reduce((sum, f) => sum + (f.rating ?? 0), 0) / rated.length;
-      evidence.push(`Average outfit rating: ${avg.toFixed(1)}/4 from ${rated.length} ratings`);
+      evidence.push({
+        key: "averageRating",
+        params: { rating: avg.toFixed(1), count: rated.length },
+        en: `Average outfit rating: ${avg.toFixed(1)}/4 from ${rated.length} ratings`,
+      });
     }
 
     const actionCounts = style.feedback.reduce<Record<string, number>>((acc, f) => {
       acc[f.action] = (acc[f.action] ?? 0) + 1;
       return acc;
     }, {});
-    const actions = Object.entries(actionCounts)
-      .map(([action, count]) => `${action} ×${count}`)
-      .join(", ");
-    if (actions) {
-      evidence.push(`Your feedback actions: ${actions}`);
+    const actions = Object.entries(actionCounts).map(([action, count]) => ({ action, count }));
+    if (actions.length > 0) {
+      evidence.push({
+        key: "feedbackActions",
+        params: { actions },
+        en: `Your feedback actions: ${actions.map(({ action, count }) => `${action} ×${count}`).join(", ")}`,
+      });
     }
 
     const memories = style.memories.filter(
       (m) => m.status === "confirmed" || m.status === "possible"
     );
     if (memories.length > 0) {
-      evidence.push(
-        `Learned from your history: ${memories
-          .slice(0, 5)
-          .map((m) => `${m.description}`)
-          .join("; ")}`
-      );
+      const items = memories.slice(0, 5).map((m) => m.description);
+      evidence.push({
+        key: "learnedMemory",
+        params: { items },
+        en: `Learned from your history: ${items.join("; ")}`,
+      });
     }
 
     return evidence;
   }
+}
+
+/** Canonical English rendering of evidence facts — always used for LLM prompts. */
+export function formatEvidenceForPrompt(evidence: StructuredEvidence[]): string[] {
+  return evidence.map((entry) => entry.en);
 }
 
 function formatItem(item: ClothingItemRow): string {

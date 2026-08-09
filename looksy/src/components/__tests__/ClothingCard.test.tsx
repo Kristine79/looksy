@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ClothingCard } from "@/components/clothing/ClothingCard";
 import { makeWardrobeItem } from "@/test/fixtures";
 
@@ -41,5 +41,20 @@ describe("ClothingCard", () => {
     render(<ClothingCard item={makeWardrobeItem()} />);
     const img = screen.getByRole("img", { name: "Shirt photo" });
     expect(img).toHaveAttribute("src", "https://storage.looksy.app/demo/00000000-0000-4000-8000-000000000001.jpg");
+  });
+
+  it("opens item details when the card is clicked", () => {
+    const item = makeWardrobeItem();
+    const onOpenDetails = vi.fn();
+    render(<ClothingCard item={item} onOpenDetails={onOpenDetails} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "View details for Shirt" }));
+    expect(onOpenDetails).toHaveBeenCalledWith(item);
+  });
+
+  it("announces the dialog affordance for keyboard and screen readers", () => {
+    render(<ClothingCard item={makeWardrobeItem({ type: "dress" })} />);
+    const trigger = screen.getByRole("button", { name: "View details for Dress" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
   });
 });
